@@ -1,0 +1,4 @@
+Logikataloog peab olema olemas juba enne esimest päringut: kui rakendus loob
+selle ise, võib ASP.NET selle faili-muutuse peale AppDomain'i taaskäivitada ja
+esimene logirida kaob. Toodangus loob selle Ansible ja annab app pooli
+identiteedile kirjutusõiguse.

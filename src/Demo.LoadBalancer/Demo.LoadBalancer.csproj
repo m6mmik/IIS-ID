@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Demo.LoadBalancer</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\backends.txt" Link="backends.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

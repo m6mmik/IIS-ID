@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>Demo.Client</RootNamespace>
+    <AssemblyName>Demo.Client</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Demo.Contracts\Demo.Contracts.csproj" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.IdentityModel" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+</Project>

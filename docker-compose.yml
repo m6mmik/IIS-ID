@@ -1,0 +1,12 @@
+services:
+  haproxy:
+    image: haproxy:2.8
+    container_name: iis-id-haproxy
+    ports:
+      - "9443:443"
+      - "8404:8404"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Demo.Host</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Demo.Contracts\Demo.Contracts.csproj" />
+    <ProjectReference Include="..\Demo.Service\Demo.Service.csproj" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.IdentityModel" />
+    <Reference Include="System.Configuration" />
+  </ItemGroup>
+</Project>

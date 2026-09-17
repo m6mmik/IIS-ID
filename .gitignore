@@ -1,0 +1,14 @@
+[Bb]in/
+[Oo]bj/
+.vs/
+.lab/
+*.user
+*.suo
+iis/applicationhost.config
+iis/logs/
+certs/*.pfx
+certs/*.cer
+certs/*.crt
+certs/*.key
+certs/*.thumbprint
+!certs/.gitkeep
