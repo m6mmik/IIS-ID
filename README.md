@@ -581,7 +581,7 @@ Mall: `ansible/inventories/work.example.yml`. Ära kopeeri labi `group_vars` pro
 
 **5. Pärast esimest PIN1-t**
 
-- [ ] IIS W3C: `sc-status` / `sc-substatus` / `sc-win32-status` — 200, või 403 **16** `2148204809`, või 403 **13** `2148205075` (`0x80092013`)?
+- [ ] IIS W3C: `sc-status` / `sc-substatus` / `sc-win32-status` — 200, või 403 **16** `2148204809` (`0x800B0109`), või 403 **13** `2148081683` (`0x80092013`)?
 - [ ] Kui 16: küsi punktid 1–2 (CTL vs juur). Kui 13: punkt 3.
 - [ ] Kas viga on **ühel** APP-il (nagu APP12) või kõigil? Üks masin = selle VM-i hoidla/CTL/WinHTTP, mitte HAProxy.
 - [ ] PIN2: see demo ei küsi SK ajatemplit. Töö juriidiline allkiri võib vajada eraldi URL-i — see ei ole PIN1.
@@ -1109,7 +1109,7 @@ Toodangus pane see rakendusest väljapoole (`D:\logs\demo\service.log`): logi j�
 - IIS saidi W3C logimine + väljad `sc-substatus`, `sc-win32-status` (muidu kordub sama pimedus)
 - CAPI2 Operational: `wevtutil sl Microsoft-Windows-CAPI2/Operational /e:true` (jäta sisse ainult tõrkeotsingu ajaks, logi kasvab kiiresti)
 - logikataloog **luuakse ette** ja saab app pooli identiteedile kirjutusõiguse; `serviceLogPath` osutab rakendusest väljapoole
-- `Get-EidReport.ps1` **igal** IIS-il — 403.16 on masinapõhine, ühe masina roheline vastus ei tõesta midagi teise kohta
+- `Get-EidReport.ps1` **igal** IIS-il — 403.16 on masinapõhine, ühe masina roheline vastus ei tõesta midagi teise kohta. Sama kehtib `Get-IdCardMatrix.ps1` kohta: selle mõte on just kahe hosti `FINGERPRINT` rea vahe
 - `httpErrors` jäta `DetailedLocalOnly`; alamstaatus võta logist, mitte kliendi ekraanilt
 
 ---
@@ -1133,12 +1133,19 @@ või eraldi:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\Get-EidReport.ps1 -Minutes 15
 powershell -ExecutionPolicy Bypass -File .\scripts\Get-EidReport.ps1 -EnableLogs
+powershell -ExecutionPolicy Bypass -File .\scripts\Get-IdCardMatrix.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\Test-ClientCertTrust.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\Test-EidAfterPin1.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\Test-EidAfterPin1.ps1 -EnableCapi2Log
 ```
 
-`Get-EidReport.ps1` on koondraport (üks fail, verdikt ees). `Test-*` skriptid on vanemad üksiktestid, mis kirjutavad ainult ekraanile.
+`Get-EidReport.ps1` on koondraport (üks fail, verdikt ees): *mis juhtus*. `Get-IdCardMatrix.ps1` vastab [võrdlusmaatriksi](#2-võrdlusmaatriks) ridade kaupa: *millises reas on viga*; `-Compare` diffib kaks hosti (rida 18) ja `-NoNetwork` sobib suletud VM-i. `Test-*` skriptid on vanemad üksiktestid, mis kirjutavad ainult ekraanile.
+
+Mitme hosti peale korraga (fetchib väljundid `.lab/matrix-<host>.txt`):
+
+```bash
+ansible-playbook -i inventories/work.yml matrix.yml -e matrix_minutes=1440
+```
 
 `-EnableCapi2Log` paneb CAPI2 Operational logi käima; tee PIN1 uuesti ja käivita skript veel kord.
 
@@ -1492,7 +1499,7 @@ Kõige petlikum vea klass: **paranda ära ja mõne päeva pärast on 403.16 taga
 - Schannel võtmed (`ClientAuthTrustMode`, `SendTrustedIssuerList`, `Protocols`) tulevad turvabaseline'ist (CIS/STIG). Ansible seab, GPO võtab tagasi.
 - Kui IIS-is on **Client Certificate Mapping Authentication** (mitte rakenduse tasandi kontroll), peab sert olema **NTAuth** hoidlas ja seotud AD kontoga. ID-kaardiga see üldjuhul ei sobi; sümptom on 401.x või „many-to-one mapping" 403.16.
 
-Kontroll: `gpresult /h gpo.html` (otsi Public Key Policies), `certutil -store -enterprise Root`, `certutil -viewstore -enterprise NTAuth`, ja **`Get-EidReport.ps1` enne ja pärast `gpupdate /force`** — kui vahe on, on GPO ülem. Parandus: vii ahel GPO/AD poolele ja lepi turvameeskonnaga kokku, et baseline jätab TLS 1.2 ja teie Schannel võtmed alles.
+Kontroll: `gpresult /h gpo.html` (otsi Public Key Policies), `certutil -store -enterprise Root`, `certutil -viewstore -enterprise NTAuth`, ja **`Get-IdCardMatrix.ps1` enne ja pärast `gpupdate /force`** (teine kord `-Compare <esimene fail>`, mis nimetab muutunud võtmed ise) — kui vahe on, on GPO ülem. Parandus: vii ahel GPO/AD poolele ja lepi turvameeskonnaga kokku, et baseline jätab TLS 1.2 ja teie Schannel võtmed alles.
 
 ### 4. „Kaardil ei ole sertifikaate" — lubatud väljastajate loend
 
@@ -1830,7 +1837,17 @@ Reegel number üks: mudel ei tohi soovitada turvet nõrgemaks keerata selleks, e
 
 ### 1. Mida mudelile ette anda
 
-Selle repo pealt: `README.md`, `src/`, `scripts/`, `haproxy/`.
+**Kõik 20 rida ei ole lähtekoodist tuvastatavad.** Kood näitab *kavatsust*, masin näitab *tegelikkust*, ja nende kahe vahe ongi tihti kogu vastus. Seepärast on see töö kaks eraldi prompti:
+
+| Rühm | Read | Kust vastus tuleb | Miks mitte teisiti |
+|---|---|---|---|
+| **A — ainult kood** | 2, 8, 9, 11 | Terraform / Ansible / .NET / `haproxy.cfg` | Masinast ei paista: HAProxy ei ole IIS VM-is, OID-kontroll ja kliendi retry on koodis |
+| **B — ainult masin** | 4, 13, 14, 18, 20 | `scripts/Get-IdCardMatrix.ps1` | Koodis neid ei ole: päris logirida, päris hoidla sisu, kahe hosti vahe, GPO mõju |
+| **C — mõlemas** | 1, 3, 5, 6, 7, 10, 12, 15, 16, 17, 19 | kood **ja** masin | Ansible ütleb X, masin näitab Y → drift, GPO, käsitsi tehtud muudatus. **See lahknevus on leid**, mitte mõõtmisviga |
+
+Rühm C on põhjus, miks ainult koodi lugemine eksitab: töö APP võib olla käsitsi püsti pandud, baseline võib nupu tagasi keerata, ja `netsh` seaded ei ole üldse koodis, kui keegi need kunagi käsitsi tegi.
+
+**Prompt 1 sisend (kood).** Selle repo pealt: `README.md`, `src/`, `scripts/`, `haproxy/`.
 
 Töö poolelt (loetav koopia, mitte tootmisligipääs):
 
@@ -1842,14 +1859,77 @@ Töö poolelt (loetav koopia, mitte tootmisligipääs):
 | HAProxy | `haproxy.cfg` **mõlemast kihist** (väline + sisemine) |
 | Ansible | IIS roll, `group_vars`, sertide ja `netsh` ülesanded |
 | Terraform | NSG / security group reeglid, LB, DNS |
-| Ühe IIS-i hetkeseis | `netsh http show sslcert` (sh **Disable Authority Info Access**), `netsh winhttp show proxy`, `certutil -store Root/CA/ClientAuthIssuer`, Schannel võtmed `ClientAuthTrustMode` / `SendTrustedIssuerList` |
-| Vea tõendid | IIS W3C read `sc-status`/`sc-substatus`, CAPI2 sündmused, HAProxy `show stat` |
+| Ühe IIS-i hetkeseis | tuleb prompt 2 väljundist (`Get-IdCardMatrix.ps1`): `netsh http show sslcert` sh **Disable Authority Info Access**, `netsh winhttp show proxy`, `certutil -store Root/CA/ClientAuthIssuer`, Schannel `ClientAuthTrustMode` / `SendTrustedIssuerList` |
+| Vea tõendid | IIS W3C read `sc-status`/`sc-substatus` (sama skript), CAPI2 sündmused, HAProxy `show stat` |
 
 **Ära** pane prompti privaatvõtmeid, `.pfx` faile ega päris isikukoode. Sertifikaadi räsid ja isikukoodid maskeeri — võrdluseks piisab teadmisest, *kas* väärtus on olemas ja *millisest* hoidlast.
+
+#### Prompt 2 sisend (masin): `scripts\Get-IdCardMatrix.ps1`
+
+Üks ASCII fail, **ei muuda midagi** (ainult `show` / `list` / `-store` / logilugemine). Kopeeri VM-i ja käivita Administrator'ina. Väljund on kirjutatud maatriksi ridade kaupa — täpselt see, mida prompt 2 sisendiks vajab.
+
+```powershell
+# katkisel APP-il
+powershell -ExecutionPolicy Bypass -File Get-IdCardMatrix.ps1
+
+# suletud VM (ei proovi SK poole ühendust), pikem logiaken
+powershell -ExecutionPolicy Bypass -File Get-IdCardMatrix.ps1 -NoNetwork -Minutes 240
+
+# rida 18/20: võrdle terve hostiga (või iseendaga enne gpupdate'i)
+powershell -ExecutionPolicy Bypass -File Get-IdCardMatrix.ps1 -Compare \\share\idcard-matrix-APP11.txt
+```
+
+Iga rida saab ühe seisundi:
+
+| Seisund | Tähendus |
+|---|---|
+| `PASS` | see rida on **sellel** masinal korras |
+| `FAIL` | blokeeriv — ainuüksi see seletab ebaõnnestunud logini |
+| `WARN` | kahtlane või sõltub teisest kihist |
+| `DATA` | vaja rohkem sisendit (teine host, taastekitatud login, admin-õigused) |
+| `REPO` | VM-ist ei paista → läheb **prompt 1**-le (rühm A) |
+
+Lisaks annab skript:
+
+- **`CROSS-CHECKS`** — vastuolud, mis üksikuna ei paista. Nt „logis 403.13, aga praegu on `verifyclientcertrevocation=Disabled`” tähendab, et keegi juba keeras nuppu **või** see logirida on teisest seadistusest; siis on ainus mõistlik samm üks login taastekitada, mitte serte lisada.
+- **`FINGERPRINT`** — üherealine kõigi otsustavate nuppude kokkuvõte. Käivita **igal** APP-il ja diffi read 18/20 jaoks; `-Compare` teeb selle diffi ise ja nimetab erinevad võtmed.
+- **`403 EVIDENCE`** — päris `sc-substatus` + `sc-win32-status` read koos dekodeeritud tähendusega (rida 14). Kui W3C-s neid välju ei logita, ütleb skript sedagi eraldi.
+
+Kui `Get-EidReport.ps1` vastab küsimusele „*mis juhtus*”, siis see skript vastab küsimusele „*millises maatriksi reas on viga*”. Mõlemad on read-only; suletud VM-is käivita `-NoNetwork`.
+
+Kui tööl **ei tohi** ükski skriptifail liikuda, korja tõendid ühe kleebitava plokiga (kitsam kui skript: ei anna rea-kaupa verdikti ega fingerprint'i):
+
+```powershell
+# Katkisel IIS-il, Administrator. Ei muuda midagi. Maskeeri isikukoodid enne jagamist.
+$out = "$env:TEMP\idcard-evidence-$env:COMPUTERNAME.txt"
+& {
+  '=== sslcert ==='      ; netsh http show sslcert
+  '=== winhttp ==='      ; netsh winhttp show proxy
+  '=== schannel ==='     ; Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL' |
+                             Select-Object ClientAuthTrustMode, SendTrustedIssuerList | Format-List
+  '=== Root ==='         ; certutil -store Root            | Select-String 'EE-Gov|EEGov|ESTEID'
+  '=== CA ==='           ; certutil -store CA              | Select-String 'ESTEID|EID-SK'
+  '=== issuer ==='       ; certutil -store ClientAuthIssuer| Select-String 'ESTEID|EE-Gov|EEGov'
+  '=== iis 403 ==='      ; Get-ChildItem "$env:SystemDrive\inetpub\logs\LogFiles\W3SVC*\*.log" |
+                             Sort-Object LastWriteTime -Descending | Select-Object -First 1 |
+                             ForEach-Object { Select-String $_.FullName -Pattern ' 403 ' | Select-Object -Last 10 }
+  '=== capi2 ==='        ; Get-WinEvent -LogName 'Microsoft-Windows-CAPI2/Operational' -MaxEvents 15 -EA SilentlyContinue |
+                             Select-Object TimeCreated, Id, LevelDisplayName | Format-Table -AutoSize
+  '=== schannel evt ===' ; Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Schannel'} -MaxEvents 15 -EA SilentlyContinue |
+                             Select-Object TimeCreated, Id | Format-Table -AutoSize
+} *>&1 | Tee-Object -FilePath $out
+"kogutud: $out"
+```
+
+Käivita see **igal** APP-il, ka tervetel. Kahe masina vahe on tihti kiirem vastus kui ükskõik milline config-lugemine.
 
 ### 2. Võrdlusmaatriks
 
 Iga rida on üks küsimus, millele vastus peab tulema **töö** poolelt. Vasak veerg näitab, kus labis vastus on.
+
+**Kui viga on praegu olemas, ära alusta siit.** Read 1–13 on „kas arhitektuur on õige”. Elava 403 puhul alusta ridadest **14–20** (tõendid ja masinapõhised nupud) — need annavad vastuse tundidega, mitte päevadega. Järjekord: `sc-substatus` + `sc-win32-status` → kumb kiht (ahel vs tühistus) → alles siis config.
+
+Ridadele, mis on masinas mõõdetavad (4, 13, 14, 18, 20 ja kogu rühm C), vastab `scripts\Get-IdCardMatrix.ps1` automaatselt — käivita see enne, kui hakkad configi lugema.
 
 | # | Küsimus | Kus labis | Mida tööl vaadata | Ootus |
 |---|---|---|---|---|
@@ -1866,6 +1946,18 @@ Iga rida on üks küsimus, millele vastus peab tulema **töö** poolelt. Vasak v
 | 11 | Mis on “allkiri”? | `LocalSigner.cs`, `DemoService.SubmitSignature` | kas nonce, ahel, ajatempel, konteiner | Kui vaja juriidilist allkirja → DigiDoc SDK, vt [punkt 3](#3-pin2-allkiri-labis-ei-ole-juriidiline-allkiri) |
 | 12 | Väljuv võrk OCSP jaoks | [AIA/OCSP/CRL tabel](#url-id-mida-iis-peab-kätte-saama-aia--ocsp--crl) | Terraform egress reeglid | **HTTP 80** lubatud (OCSP ei ole 443) või proxy |
 | 13 | Serveri serdi nimi | `DemoChannel.cs` DNS-identiteet | VIP FQDN vs iga IIS-i serdi CN/SAN | Passthrough: kõik IIS-id esitavad sama VIP-i serti |
+
+Read 14–20 tulevad labi katsetest 20.09.2026 — iga üks neist andis päris kaardiga **403.16 või 403.13**, kuigi „Root ja CA on korras”. Vt [Tööl kontrollida](#tööl-kontrollida-labi-järeldused) ja [APP12 juhtum](#app12-40316-kui-root-ja-ca-näivad-korras).
+
+| # | Küsimus | Kus labis | Mida tööl vaadata | Ootus |
+|---|---|---|---|---|
+| 14 | **Mis on päris alamstaatus ja win32?** | [Kust VM-ist vaadata](#kust-vm-ist-vaadata-kui-login-ei-õnnestu) | IIS W3C `sc-substatus` + `sc-win32-status` **enne** iga muudatust | `403 16 2148204809` (`0x800B0109`) = usaldus; `403 13 2148081683` (`0x80092013`) = tühistus; `403 7` = serti ei tulnud. Ilma selle numbrita on iga edasine samm oletus |
+| 15 | **CTL: kas `Ctl Store Name` filtreerib?** | katse A (`ansible/lockdown-app12.yml`) | `netsh http show sslcert` → `Ctl Store Name` **ja** `certutil -store ClientAuthIssuer` | `(null)`, **või** `ClientAuthIssuer` kus ESTEID2018/2025 **on** kirjas. CTL ilma ESTEID-ita = 403.16, kuigi `Root`/`CA` laitmatud |
+| 16 | `ClientAuthTrustMode` 0/1/2 | `ansible/roles/eid_trust` | Schannel võti + `ClientAuthIssuer` sisu **koos** | `2` + täidetud issuer. `1` (Exclusive Root) nõuab, et ahel lõpeks **juurikaga** selles hoidlas — vahelüli ei piisa |
+| 17 | Tühistus vs väljuv võrk **koos** | katse 10 (`ansible/lockdown-ocsp.yml`) | `verifyclientcertrevocation` **ja** `netsh winhttp show proxy` **ja** NSG :80 | Kas mõlemad sees või mõlemad väljas. Revocation `enable` + suletud egress = 403.13. `Disabled` = SK/`ocsp.smit.sise` vead on **müra** |
+| 18 | Kas masinad on **omavahel** identsed? | `serial: 1`, roll kõigil hostidel | sama tõendiplokk **igal** APP-il, diff kahe vahel | Vahelduv viga = ühe masina nupp. APP12 oli üks host — võrdle katkist tervega, mitte labiga |
+| 19 | Client Certificate Mapping / NTAuth | `iis_eid` keelab mõlemad | IIS *Client Certificate Mapping Authentication*, *IIS Client Certificate Mapping* | **Väljas**, kui identiteet tuleb rakenduse koodist. Sisse lülitatud mapping ilma reeglita annab 403 ka korras ahelaga |
+| 20 | Kas GPO / CIS keerab tagasi? | — (labis GPO-t pole) | `gpresult /h`, tõendiplokk **enne ja pärast** `gpupdate /force` | Schannel võtmed ja `ClientAuthIssuer` peavad jääma. „Eile töötas, täna 403.16” = see rida |
 
 ### 3. Otsingud, millest alustada
 
@@ -1884,6 +1976,19 @@ idleTimeout|regularTimeInterval
 SecurityProtocol|Tls12|Tls13
 ```
 
+Ridade 14–20 jaoks (Ansible / IaC pool, kus nupud tegelikult sünnivad):
+
+```text
+sslctlstorename|ClientAuthTrustMode|SendTrustedIssuerList
+verifyclientcertrevocation|disableaia|usagecheck|verifyrevocationwithcached
+eid_revocation|eid_download_certs|eid_winhttp_proxy|allow_lab
+logExtFileFlags|sc-substatus|sc-win32-status|traceFailedRequests
+clientCertificateMappingAuthentication|iisClientCertificateMapping
+ocsp.smit|aia.sk.ee|ocsp.eidpki|crl.eidpki
+```
+
+`sslctlstorename` või `ClientAuthTrustMode: 1` leidmine töö rollist / baseline'ist on tihti **kogu vastus** — see on rida 15/16 ja labis tõestatud 403.16 põhjus.
+
 ### 4. Väljundi formaat, mida mudelilt nõuda
 
 Iga leiu kohta:
@@ -1894,10 +1999,56 @@ Iga leiu kohta:
 4. **Risk** — `blokeeriv` / `oluline` / `kosmeetiline`.
 5. **Muudatus** — konkreetne fail + väärtus.
 6. **Kiht** — Terraform / Ansible / IIS / HAProxy / teenuse kood / kliendi kood.
+7. **Tõestus** — käsk, mis näitab seisu **enne ja pärast** (nt `netsh http show sslcert`, `certutil -store ClientAuthIssuer`, uus IIS logirida).
+8. **Tagasikeeramine** — kuidas see üks muudatus maha võtta, kui viga ei kadunud.
 
-Lõppu kaks eraldi nimekirja: **“mida ei saanud kontrollida ja mis andmeid vaja”** ning **“muudatused, mis nõuavad hooldusakent”** (`netsh` seose muutmine, app pooli restart, Schannel registri muudatus → reboot).
+Nõua **üht muudatust korraga**, mitte „täida igaks juhuks kõik hoidlad ja pane CTL ka”. Kui parandad mitu nuppu koos, ei tea sa hiljem, milline oli katki — labis andsid katsed A ja B **identse** IIS rea (`403 16 2148204809`), aga vajasid **erinevat** parandust.
+
+Lõppu kolm eraldi nimekirja:
+
+- **“mida ei saanud kontrollida ja mis andmeid vaja”**
+- **“muudatused, mis nõuavad hooldusakent”** (`netsh` seose muutmine, app pooli restart, Schannel registri muudatus → reboot)
+- **“mis tuleb tellida võrgust”** — hostid + pordid eraldi ridadena, koos märkega, kas see on vajalik **ahela** (ei ole) või **tühistuse** jaoks (on). Vt [AIA/OCSP/CRL](#url-id-mida-iis-peab-kätte-saama-aia--ocsp--crl)
 
 ### 5. Valmis prompt
+
+Kaks eraldi prompti, **selles järjekorras**, kui viga on elus: kõigepealt masin (kumb kiht katki), siis kood (miks nupp selline on). Kui elavat viga ei ole, alusta prompt 1-st.
+
+#### Prompt 2 — masina tõendid (rühm B + C tegelikkus)
+
+```text
+Lisatud on scripts\Get-IdCardMatrix.ps1 väljund ühest või mitmest IIS masinast
+(IIS-ID README peatükk "Töö repoga võrdlemine"). Skript on read-only.
+
+Ülesanne: ütle, MILLISES maatriksi reas on viga, ja ainult selle tõendite põhjal.
+
+Reeglid:
+- Alusta reast 14 (sc-substatus + sc-win32-status). Ütle kõigepealt üks asi:
+  kas katki on USALDUS (403.16 / 0x800B0109) või TÜHISTUS (403.13 / 0x80092013)
+  või ei tulnud serti üldse (403.7). Ära liigu edasi, kuni see on öeldud.
+- Kui rida 14 on DATA (logis pole 403.7/13/16), ütle seda ja nõua ühe logini
+  taastekitamist SELLEL hostil. Ära hakka oletama configi pealt.
+- Kasuta CROSS-CHECKS plokki: vastuolu kahe rea vahel on tugevam tõend kui
+  ükski üksik rida.
+- Kui on mitu masinat: diffi FINGERPRINT read (rida 18) ja nimeta erinevad
+  võtmed. Võrdle katkist TERVEGA, mitte labiga.
+- Ära seleta 403.16 OCSP-ga ega proxyga. Kui revocation=Disabled, on OCSP
+  veateated müra (rida 17).
+- Ära soovita serte lisada enne, kui Ctl Store Name (15) ja
+  ClientAuthTrustMode (16) on vaadatud — vale CTL tekitab 403.16 ise.
+- REPO-märgistatud read jäta vahele: need lähevad koodi-prompti.
+- Üks muudatus korraga. Iga soovituse juurde: tõestuskäsk (mida uuesti
+  jooksutada) ja tagasikeeramine.
+
+Väljund:
+1) Üks lause: kumb kiht katki on ja millisel hostil.
+2) Kuni kolm kõige tõenäolisemat rida, koos tõendiga skripti väljundist
+   (tsiteeri rida).
+3) Järgmine üks samm + käsk, mis tõestab, kas see aitas.
+4) Nimekiri "puuduvad andmed" (nt teise hosti väljund, taastekitatud login).
+```
+
+#### Prompt 1 — kood ja IaC (rühm A + C kavatsus)
 
 ```text
 Sul on kaks repot:
@@ -1905,7 +2056,10 @@ A) IIS-ID demo (etalon) — loe kõigepealt A/README.md peatükke
    "Enne toodangut: kriitiline nimekiri" ja "Töö repoga võrdlemine".
 B) töö repo + lisatud IIS-i väljundid (tegelikkus).
 
-Ülesanne: võrdle B-d A README peatüki "Võrdlusmaatriks" 13 rea kaupa.
+Ülesanne: võrdle B-d A README peatüki "Võrdlusmaatriks" 20 rea kaupa.
+Kui kaasas on ka Get-IdCardMatrix.ps1 väljund, siis iga koht, kus kood ütleb
+üht ja masin teist, on eraldi leid (drift / GPO / käsitsi muudatus) — nimeta
+see välja, ära vali vaikimisi koodi kasuks.
 
 Reeglid:
 - Ära paku turvet nõrgemaks keeravaid lahendusi (PeerOrChainTrust,
@@ -1915,11 +2069,27 @@ Reeglid:
 - Ära paku HAProxy-s SSL termination'it mTLS-i "parandamiseks".
 - Ära paku Web.config <defaultProxy> lahendust HTTP.sys OCSP probleemile.
 - Ära paku session affinity cookie'd TCP-režiimis (seda ei ole olemas).
+- Ära järelda "Root ja CA on olemas, seega ahel on korras" enne, kui oled
+  vaadanud Ctl Store Name + ClientAuthIssuer sisu + ClientAuthTrustMode (read 15-16).
+- Ära seleta 403.16 OCSP-ga. Kui verifyclientcertrevocation on Disabled,
+  on OCSP/ocsp.smit.sise veateated müra (rida 17).
+- Ära soovita juurikat ClientAuthIssuer'isse ega CTL-i lisamist
+  "filtreerimiseks", kui issuer-hoidla sisu ei ole kõigil hostidel tõestatud.
+- Ära soovita mitut muudatust korraga; iga leiu juurde tõestuskäsk ja
+  tagasikeeramine.
 - Kui andmed puuduvad, kirjuta "ei tuvastatud" ja loetle, mida vaja.
 
-Väljund: tabel iga rea kohta (Lab | Töö | Risk | Muudatus | Kiht),
-seejärel "puuduvad andmed" ja "vajab hooldusakent" nimekirjad.
-Alusta reast 1 (WCF sessioon) — see otsustab, kas failover on üldse võimalik.
+Väljund: tabel iga rea kohta (Lab | Töö | Risk | Muudatus | Kiht | Tõestus |
+Tagasikeeramine), seejärel "puuduvad andmed", "vajab hooldusakent" ja
+"tuleb tellida võrgust" nimekirjad.
+
+Alustamise järjekord:
+- Kui B-s on LIVE viga (IIS logis 403): seda ei lahendata koodi lugemisega.
+  Nõua Get-IdCardMatrix.ps1 väljundit ja alusta ridadest 14-20; ütle kõigepealt,
+  KUMB kiht katki on (ahel = 403.16 vs tühistus = 403.13). Kui masinaid on mitu,
+  võrdle katkist tervega (rida 18).
+- Kui vea tõendeid ei ole: alusta reast 1 (WCF sessioon) — see otsustab,
+  kas failover on üldse võimalik.
 ```
 
 ### 6. Kus mudelid kõige tõenäolisemalt eksivad
@@ -1937,6 +2107,11 @@ Need vead tulevad ette ka heade mudelite puhul, sest üldine veebiteadmine viib 
 | “Pane juurika ClientAuthIssuer’isse” | IIS 8+ ootab sealt **kesktaseme** väljastajaid |
 | “Health eraldi saidiks, nii on puhtam” | Eraldi app pool → health valetab WCF-i seisu kohta |
 | “Rakenduse logis on sert kehtiv, järelikult server on korras” | Rakenduse `X509Chain` ja HTTP.sys otsustavad eri hoidlate ja eri lippude põhjal. 403.16 kõrval võib rakenduse kontroll rahulikult „kehtiv” öelda |
+| “Sündmuselogis on OCSP timeout — paranda OCSP, siis 403.16 kaob” | Kui `verifyclientcertrevocation` on **Disabled**, ei saa HTTP.sys tühistuse pärast 403-t anda. `2148204809` on usaldus. Labis tõestatud: sama müra, login suri CTL/juure peale |
+| “Rakenduse logis pole midagi, järelikult logimine on katki” | 403.7/13/16 sünnivad **enne** w3wp-d. Tühi `service.log` ongi tõend: loe IIS `sc-substatus` |
+| “Lisa kõik hoidlatesse ja pane igaks juhuks CTL ka peale” | Mitu muudatust korraga peidab päris põhjuse; vale CTL **tekitab** 403.16. Üks muudatus + tõestuskäsk |
+| “Ühel serveril töötab, seega server on korras — viga on kliendis/LB-s” | 403.16 on masinapõhine. Round-robin tabab vahel katkist hosti; võrdle hostide tõendeid omavahel |
+| “PowerShellist / brauserist avaneb SK URL, seega võrk on korras” | Need kasutavad sinu kasutaja WinINet-i. HTTP.sys / CAPI2 käib **WinHTTP**-st Local System kontekstis |
 
 ---
 

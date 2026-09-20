@@ -1,0 +1,48 @@
+# Run scripts/Get-IdCardMatrix.ps1 inside every IIS host and bring the output
+# back to .lab/. Read-only: the script only reads netsh/certutil/logs.
+#
+#   ansible-playbook -i inventories/lab.yml matrix.yml
+#   ansible-playbook -i inventories/lab.yml matrix.yml -e matrix_minutes=1440
+#
+# Work inventory: same command, plus -e matrix_no_network=true on closed VMs.
+# Run it on EVERY app server - row 18 of the README matrix is the diff between
+# two FINGERPRINT lines.
+- hosts: iis
+  gather_facts: false
+  vars:
+    matrix_minutes: 240
+    matrix_no_network: true
+    matrix_remote_dir: C:\IIS-ID\scripts
+    matrix_out_dir: C:\IIS-ID\.lab
+  tasks:
+    - name: Copy the matrix collector
+      ansible.windows.win_copy:
+        src: "{{ playbook_dir }}/../scripts/Get-IdCardMatrix.ps1"
+        dest: "{{ matrix_remote_dir }}\\Get-IdCardMatrix.ps1"
+
+    - name: Collect matrix answers
+      ansible.windows.win_shell: >
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File {{ matrix_remote_dir }}\Get-IdCardMatrix.ps1
+        -Minutes {{ matrix_minutes }}
+        -OutDir {{ matrix_out_dir }}
+        {{ '-NoNetwork' if matrix_no_network | bool else '' }}
+      register: matrix
+      changed_when: false
+
+    - name: Matrix answers
+      ansible.builtin.debug:
+        var: matrix.stdout_lines
+
+    - name: Newest output file
+      ansible.windows.win_shell: |
+        (Get-ChildItem '{{ matrix_out_dir }}\idcard-matrix-*.txt' |
+          Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+      register: matrix_file
+      changed_when: false
+
+    - name: Fetch it for host-to-host diffing
+      ansible.builtin.fetch:
+        src: "{{ matrix_file.stdout | trim }}"
+        dest: "{{ playbook_dir }}/../.lab/matrix-{{ inventory_hostname }}.txt"
+        flat: true
