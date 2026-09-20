@@ -1,0 +1,18 @@
+iis_site_path: C:\IIS-ID\src\Demo.Service
+iis_copy_app: true
+iis_enable_freb: false
+iis_app_id: "{4dc3e181-e14b-4a21-b022-59fc669b0914}"
+iis_sites: []
+iis_features: []
+iis_log_fields: "Date,Time,ClientIP,UserName,SiteName,ComputerName,ServerIP,ServerPort,Method,UriStem,UriQuery,HttpStatus,HttpSubStatus,Win32Status,TimeTaken,ProtocolVersion,Host,UserAgent"
+iis_lab_ca: "{{ playbook_dir }}/../certs/lab-root.cer"
+iis_lab_pfx: "{{ playbook_dir }}/../certs/lab-server.pfx"
+iis_lab_pfx_password: lab
+iis_lab_thumbprint_file: "{{ playbook_dir }}/../certs/server.thumbprint"
+iis_remote_cert_dir: C:\IIS-ID\certs
+eid_revocation: false
+eid_allow_lab_certificates: false
+eid_revocation_mode_app: NoCheck
+eid_wcf_default_proxy: ""
+eid_winhttp_bypass: "<local>"
+eid_sslctl_store: ""

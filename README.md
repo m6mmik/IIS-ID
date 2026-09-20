@@ -14,6 +14,10 @@ Ametlik serveripoolne juhend: [IIS veebiserverile ID-kaardi toe seadistamine](ht
 
 > Kui lab on roheline, aga toodangus on ikka viga: [Vead, mida see lab ise esile ei kutsu](#vead-mida-see-lab-ise-esile-ei-kutsu) — GPO, korporatiivproxy, HTTP/2, idle-timeout'id, Citrix, kaardi vahetus, vahemälud. Seal on ka sümptomite kiirtabel ja käsud, millega vead labis tahtlikult tekitada.
 
+> Tööl on väljapääs vaikimisi kinni ja iga URL tuleb tellida? [Suletud võrgu lab](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm) teeb sama olukorra kodus: lockdown-stsenaariumid, logiv proxy (= tellimisnimekiri) ja Windows Server VM host-only võrgus.
+>
+> Labis 20.09.2026 läbi mängitud vead + küsimused, mida tööl küsida: [Tööl kontrollida (labi järeldused)](#tööl-kontrollida-labi-järeldused).
+
 ---
 
 ## Sisukord
@@ -28,23 +32,25 @@ Ametlik serveripoolne juhend: [IIS veebiserverile ID-kaardi toe seadistamine](ht
 8. [Failover: kui üks IIS sureb](#failover-kui-üks-iis-sureb)
 9. [Stats-leht (Kinni / Käima)](#stats-leht-kinni--käima)
 10. [Kaks Windows Serverit](#kaks-windows-serverit)
-11. [403.16 vs 403.13](#40316-vs-40313)
-12. [Toodangu IIS: ID-kaardi ahel ja paigaldus](#toodangu-iis-id-kaardi-ahel-ja-paigaldus)
-13. [Täpsed IIS seaded](#täpsed-iis-seaded)
-14. [URL-id, mida IIS peab kätte saama (AIA / OCSP / CRL)](#url-id-mida-iis-peab-kätte-saama-aia--ocsp--crl)
-15. [WCF Web.config proxy vs WinHTTP](#wcf-webconfig-proxy-vs-winhttp)
-16. [HAProxy (passthrough, kaks kihti)](#haproxy-passthrough-kaks-kihti)
-17. [Diagnostika: üks koht, kust vaadata](#diagnostika-üks-koht-kust-vaadata)
-18. [PIN1 järel ebaõnnestumine: skriptid ja logid](#pin1-järel-ebaõnnestumine-skriptid-ja-logid)
-19. [lab.ps1 käsud](#labps1-käsud)
-20. [URL-id ja pordid](#url-id-ja-pordid)
-21. [Terraform ja Ansible](#terraform-ja-ansible)
-22. [Enne toodangut: kriitiline nimekiri](#enne-toodangut-kriitiline-nimekiri)
-23. [Vead, mida see lab ise esile ei kutsu](#vead-mida-see-lab-ise-esile-ei-kutsu)
-24. [Töö repoga võrdlemine (AI-le antav ülesanne)](#töö-repoga-võrdlemine-ai-le-antav-ülesanne)
-25. [Seos töökeskkonnaga](#seos-töökeskkonnaga)
-26. [Docker HAProxy](#docker-haproxy)
-27. [Tõrkeotsing](#tõrkeotsing)
+11. [403.16 vs 403.13](#40316-vs-40313) — sh [APP12 juhtum](#app12-40316-kui-root-ja-ca-näivad-korras) ja [teised 403.16 teed](#teised-40316-teed-sama-sümptom)
+12. [Tööl kontrollida (labi järeldused)](#tööl-kontrollida-labi-järeldused)
+13. [Toodangu IIS: ID-kaardi ahel ja paigaldus](#toodangu-iis-id-kaardi-ahel-ja-paigaldus)
+14. [Täpsed IIS seaded](#täpsed-iis-seaded)
+15. [URL-id, mida IIS peab kätte saama (AIA / OCSP / CRL)](#url-id-mida-iis-peab-kätte-saama-aia--ocsp--crl)
+16. [WCF Web.config proxy vs WinHTTP](#wcf-webconfig-proxy-vs-winhttp)
+17. [HAProxy (passthrough, kaks kihti)](#haproxy-passthrough-kaks-kihti)
+18. [Diagnostika: üks koht, kust vaadata](#diagnostika-üks-koht-kust-vaadata)
+19. [PIN1 järel ebaõnnestumine: skriptid ja logid](#pin1-järel-ebaõnnestumine-skriptid-ja-logid)
+20. [lab.ps1 käsud](#labps1-käsud)
+21. [URL-id ja pordid](#url-id-ja-pordid)
+22. [Terraform ja Ansible](#terraform-ja-ansible)
+23. [Enne toodangut: kriitiline nimekiri](#enne-toodangut-kriitiline-nimekiri)
+24. [Vead, mida see lab ise esile ei kutsu](#vead-mida-see-lab-ise-esile-ei-kutsu)
+25. [Suletud võrgu lab: lockdown, proxy ja Windows Server VM](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm)
+26. [Töö repoga võrdlemine (AI-le antav ülesanne)](#töö-repoga-võrdlemine-ai-le-antav-ülesanne)
+27. [Seos töökeskkonnaga](#seos-töökeskkonnaga)
+28. [Docker HAProxy](#docker-haproxy)
+29. [Tõrkeotsing](#tõrkeotsing)
 
 ---
 
@@ -346,6 +352,275 @@ certutil -addstore -f ClientAuthIssuer ESTEID2025.crt
 
 Poliitika-OID-d (rakendus, mitte HTTP.sys): NCP+ `0.4.0.2042.1.2` ja ESTEID2018/2025 dokumendi-OID-d `EsteidPolicies` klassis. Lab lubab test-CA (`AllowLabCertificates=true`).
 
+### Loe alamstaatuse kõrvalt ka `sc-win32-status`
+
+Alamstaatus ütleb, **mis kihis** viga on. Kõrvalolev Win32-kood ütleb, **mis täpselt** valesti läks. IIS logib selle kümnendkujul, seega teisenda see kuueteistkümnendsüsteemi (`'0x{0:X}' -f <number>`):
+
+| Kood | Nimi | Tähendus |
+|---|---|---|
+| `0x800B0109` | `CERT_E_UNTRUSTEDROOT` | ahel ehitus, aga lõppes juurikaga, mida **see kontekst** ei usalda → 403.16 |
+| `0x800B010A` | `CERT_E_CHAINING` | ahel ei ehitunud lõpuni: vahepealne CA puudub |
+| `0x800B0101` | `CERT_E_EXPIRED` | sert või mõni lüli aegunud, või masina kell on paigast |
+| `0x800B010C` | `CERT_E_REVOKED` | sert on tühistatud (serveripoolel pole midagi parandada) |
+| `0x80092013` | `CRYPT_E_REVOCATION_OFFLINE` | tühistusteenus ei vastanud → 403.13 rada |
+
+### Kui rakendus ütleb „sert on kehtiv", aga IIS annab ikka 403.16
+
+See on kõige petlikum variant: rakenduse logis on kliendisert olemas ja **kehtivaks** hinnatud, HTTP.sys aga keeldub. Vastuolu ei ole — **need kaks hindavad erinevate reeglitega**:
+
+| | HTTP.sys / Schannel | Rakenduse `X509Chain` |
+|---|---|---|
+| Millised hoidlad loevad | sõltub `ClientAuthTrustMode`-st: võib nõuda, et ahel lõpeks **`ClientAuthIssuer`** hoidlas | `Root` + `CA` masina/kasutaja kontekstis |
+| Puuduva vahelüli allalaadimine (AIA) | keelatud, kui `disableaia=Enabled` | üldjuhul lubatud |
+| Tühistus | bindingu lipud (`verifyclientcertrevocation`) | rakenduse `RevocationMode` |
+
+Sellest järeldub kolm asja, mida tasub teada, enne kui hakkad hoidlaid uuesti täitma:
+
+1. **„`Root` ja `CA` on korras" ei tõesta midagi**, kui `ClientAuthTrustMode` on `1` või `2`. Siis nõuab HTTP.sys, et ahel lõpeks `ClientAuthIssuer` hoidlas, ja tühi `ClientAuthIssuer` annab **igale** kaardile `0x800B0109` — samal ajal kui rakenduse enda kontroll ütleb „kehtiv".
+2. **`disableaia=Enabled` teeb kohaliku CA-hoidla täielikkuse kohustuslikuks.** See on mõistlik seade (väldib rippumist ja väliseid päringuid kätluse ajal), aga see tähendab, et **täpselt selle** kaardigeneratsiooni väljastaja CA peab olema kohapeal. Uue generatsiooni kaart vanal masinal = 403.16, ilma et miski muu oleks muutunud.
+3. **Kui tühistus on bindingul välja lülitatud, ei saa OCSP-vead olla 403.16 põhjus.** Sündmuselogis olevad „could not retrieve OCSP response" read on sellisel masinal müra (tõenäoliselt ettevõtte sisese PKI pärand) — need kuuluvad 403.13 juurde, mitte siia.
+
+Kolm käsku, mis selle vastuolu lahendavad:
+
+```powershell
+certutil -store ClientAuthIssuer
+Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL" |
+    Select-Object ClientAuthTrustMode, SendTrustedIssuerList
+netsh http show sslcert                      # Disable Authority Info Access + Negotiate Client Certificate
+```
+
+Ja üks asi, mis ütleb kohe ka selle, mida käsud ei näita — **millisest hoidlast iga ahela lüli päriselt tuleb** ja mis on esitatud serdi väljastaja: `Demo.CertProbe` (`.\lab.ps1 probe`), vt [Diagnostika](#diagnostika-üks-koht-kust-vaadata). Ilma esitatud serdi **väljastajat** teadmata ei saa hoidlate sisu kohta järeldusi teha.
+
+### APP12: 403.16 kui Root ja CA näivad korras
+
+Töö raport `RRMT-IdCardDiag-RR-MT-DEV-APP12-20260917-130221.txt` (`RR-MT-DEV-APP12`, 17.09.2026). Sama kaart, mis labis: `PNOEE-39904250267`, väljastaja ESTEID2018.
+
+| Raport ütles | Tegelik järeldus |
+|---|---|
+| `Last IIS CommonService NOT 403.16` = **FAIL** | IIS: `403 16 2148204809` (`0x800B0109` `CERT_E_UNTRUSTEDROOT`) |
+| `IdCardAuth WcfEntry` / `ALLOW` = FAIL | WCF-i ei jõuta. Klient näeb ainult *Anonymous* / 403 |
+| `ClientCert Present=true Valid=True` + `HttpStatus=403` | Rakendus ja HTTP.sys **hindavad eri reeglitega** — see ei ole vastuolu |
+| ESTEID2018 `CA`s, EE-GovCA2018 `Root`is | „Ahel korras” **selles** kontrollis. `ClientAuthIssuer` ja `ClientAuthTrustMode` jäid vaatamata |
+| `Ctl Store Name: (null)`, Negotiate = Enabled, tühistus Disabled, `disableaia` Enabled | Tühistus on väljas → Schannel OCSP `ocsp.smit.sise` timeout on **müra**, mitte 403.16 põhjus |
+| `sslFlags=Ssl, SslNegotiateCert` (ilma Require-ita) | Sert ikkagi saadeti. 403.7 see ei ole |
+
+**Miks `ocsp.smit.sise` timeout ei ole see viga.** Raportis on kaks hirmutavat rida: otsene `ocsp.smit.sise` aegub ja Schannel 36928 *Could not retrieve an OCSP response*. See näeb välja nagu „tühistus katki”. Aga:
+
+1. Bindingul on `Verify Client Certificate Revocation : Disabled`. HTTP.sys **ei tohi** kätlust OCSP pärast 403-ga tapma. Kui tühistus oleks sees ja OCSP maas, oleks IIS rida **`403 13`** ja win32 **`0x80092013`** (`CRYPT_E_REVOCATION_OFFLINE`), mitte `403 16` / `2148204809`.
+2. `2148204809` = `0x800B0109` = `CERT_E_UNTRUSTEDROOT` — usaldus, mitte tühistus.
+3. Schannel küsib ettevõtte sisest OCSP-d ka muude serdite jaoks (ajatempel, Windows Update, skripti enda `certutil`). `ThisUpdate/NextUpdate = 1601-01-01` tähendab: vastust ei ole kunagi saadud. See täidab System logi ka siis, kui ID-kaardi rada tühistust ei tee.
+
+Järeldus: ocsp.smit.sise tasub **eraldi** korda teha (403.13 ootab ees, kui keegi lülitab `verifyclientcertrevocation=enable`), aga see APP12 login suri usalduse, mitte OCSP peale.
+
+Probleem: HTTP.sys ei küsi „kas kaart on ehtne?”, vaid „kas **selle masina selle usaldusreegli** järgi tohib see sert sisse?”. Reegel võib olla CTL (`sslctlstorename=ClientAuthIssuer`), exclusive `ClientAuthTrustMode`, või Trusted Issuers nimekiri, kuhu ESTEID2018 ei kuulu. `Root`/`CA` võivad samal ajal laitmatud olla.
+
+#### Mida lab näitas (Hyper-V IIS, 20.09.2026)
+
+Päris kaart saadab ESTEID2018 **kätlusega kaasa**. Siis ei piisa `CA` tühjendamisest ega tühjast `ClientAuthIssuer`ist: ahel on kätluses olemas ja lõpeb `EE-GovCA2018` juurikaga `Root`is → IIS logib **200**.
+
+Kaks kätlust andsid **sama** kliendi pildi (`403.16`, sert saadeti, WCF Anonymous) ja **sama** win32 `0x800B0109`, aga parandus on erinev:
+
+| Katse | Seis | Tulemus | Järeldus |
+|---|---|---|---|
+| A. CTL `ClientAuthIssuer` = ainult lab-root; juur `Root`is olemas; ESTEID `CA`s | `Ctl Store Name: ClientAuthIssuer` | 403.16 | HTTP.sys usaldab **CTL-i**, mitte `Root`/`CA`. APP12 sümptom (raportis oli juur `Root`is olemas). |
+| B. CTL maas; `EE-GovCA2018`/`EEGovCA2025` **`Root`ist ära**; ESTEID `CA` + `ClientAuthIssuer` | `Ctl Store Name: (null)` | 403.16 | Kätluse vahelüli ei päästa, kui **juur ise** pole usaldatud. APP12-t see **ei** korda — seal oli juur `Root`is. |
+
+Kuidas neid hiljem eristada, kui IIS rida on identne (`403 16 2148204809`):
+
+1. `certutil -store Root` — kas EE-GovCA2018 / EEGovCA2025 on kirjas?
+2. `netsh http show sslcert` — kas `Ctl Store Name` on `ClientAuthIssuer` või `(null)`?
+3. `certutil -store ClientAuthIssuer` — kas ESTEID2018/2025 on kirjas?
+
+Aparatuur: juur puudu → `certutil -addstore -f Root EE-GovCA2018.der.crt`. CTL/issuer → ESTEID `ClientAuthIssuer`isse (või CTL maha). Mõlemat korraga „igaks juhuks” täita tohib, aga raportist näed, kumb tegelikult katki oli.
+
+Kliendi diagnostika mõlemal korral: `Server küsis serti: True`, klient saatis serdi, alamstaatus **403.16**.
+
+```powershell
+# Katse A (ADMIN, ainult lab): CTL ilma ESTEID-ita
+# ansible/lockdown-app12.yml  (praegune fail = viimati katse B)
+# Katse B: eemalda juur Rootist, CTL maha, ESTEID jäta CA+issuer
+# Taasta alati: .\lab.ps1 ansible
+```
+
+### Teised 403.16 teed (sama sümptom)
+
+WCF tekst on alati sama. Vahe on ainult IIS `sc-substatus=16` + `sc-win32-status`.
+
+| Olukord | HTTP.sys näeb | Win32 | Kuidas ära tunda | Labis |
+|---|---|---|---|---|
+| **CTL / `ClientAuthIssuer` ilma ESTEID-ita** (APP12 sümptom) | juur või vahelüli ei ole *selles* nimekirjas | `0x800B0109` | `netsh http show sslcert` → `Ctl Store Name`; `certutil -store ClientAuthIssuer` ei näita ESTEID2018/2025 | `lockdown-app12.yml` |
+| Exclusive režiim + tühi või vale `ClientAuthIssuer` | sama, kui CTL või TrustMode 1/2 on päriselt aktiivne | `0x800B0109` | `ClientAuthTrustMode` + hoidla. Uuemal Serveril **tühi** hoidla *ilma* CTL-ita võib langeda `Root`/`CA` peale — 403.16 ei tule | `lockdown no-issuer` hostis; VM-is kontrolli, et CTL on päriselt küljes |
+| Puudub ESTEID `CA`s **ja** klient ei saada vahelüli + `disableaia` | ahel ei ehitu | `0x800B010A` | uus kaardigeneratsioon vanal masinal; suletud võrk | `lockdown no-aia`. Päris kaart, mis saadab ESTEID2018 kätlusega, **ei** kuku siia, kui juur on `Root`is |
+| Puudub EE-GovCA `Root`is | ahel lõpeb usaldamata juurikaga | `0x800B0109` | `certutil -store Root` ilma EE-GovCA2018 / EEGovCA2025 | **tõestatud 20.09.2026** (katse B): 403.16, kuigi ESTEID oli `CA` + issuer ja CTL `(null)` |
+| Ühel backendil ahel olemas, teisel mitte | sõltub, kuhu RR/LB saadab | `0x800B0109` | vahelduv 403.16; `service.log` `backend=` | jäta ESTEID ainult ühele saidile |
+| Uus generatsioon (ESTEID2025) vanal IIS-il | 2018 on olemas, 2025 mitte | `0x800B0109` / `0x800B010A` | ainult uued kaardid, vanad töötavad | pane hoidlasse ainult 2018 |
+| Aegunud leht / vahelüli / masina kell | kätlus ehitub, kehtivus ei | `0x800B0101` | `certutil -dump`; võrdle kella | — |
+| `SendTrustedIssuerList=1` + suur / vale CTL | klient ei vali ID-kaarti või saadab „vale” serdi | 403.16 või katkenud kätlus | diagnostika: „väljastajate loend”; labis on loend **väljas** | — |
+| GPO kirjutab `ClientAuthIssuer` üle | eile töötas, täna 403.16 | `0x800B0109` | `gpresult`; raport enne/pärast `gpupdate` | — |
+| Client Certificate Mapping / NTAuth | IIS mapib AD kontole, ID-kaart ei ole NTAuth-is | 401 / 403.16 | IIS *Client Certificate Mapping Authentication* | ära seda ID-kaardiga kasuta |
+
+`ClientAuthTrustMode` (Schannel, kogu masin):
+
+| Väärtus | Nimi | Tähendus |
+|---|---|---|
+| `0` | Machine Trust (vaikimisi) | väljastaja peab olema Trusted Issuers nimekirjas; CTL-ita võib langeda masina `Root`/`CA` peale |
+| `1` | Exclusive Root | ahel peab lõppema **juurikaga** caller-specified hoidlas |
+| `2` | Exclusive CA | ahel peab lõppema **vahelüli või juurikaga** caller-specified hoidlas. Labis on see tavaliselt **parandus** (IIS 8+ 403.16 ilma CTL-ita). APP12 sümptom labis: `2` **koos** `sslctlstorename=ClientAuthIssuer`, kus ESTEID puudub |
+
+#### Sama `403 16 2148204809` — mis tasub labis läbi proovida
+
+`2148204809` = ahel **sai valmis**, lõpp-juur ei ole selles kontekstis usaldatud. Enne uut katset: `.\lab.ps1 ansible` (puhas baas), siis **üks** muudatus, päris kaart, diagnostika, `sc-win32-status` IIS logis.
+
+| # | Katse | Oodatav | Mida tõestab | Tasub? |
+|---|---|---|---|---|
+| 1 | CTL `ClientAuthIssuer` = ainult lab-root, TrustMode 2 | **juba tehtud** — 403.16 / `800B0109` | HTTP.sys usaldab CTL-i, mitte `Root`/`CA` | — |
+| 2 | Eemalda `EE-GovCA2018` (+ soovi korral `EEGovCA2025`) **`Root`ist**. CTL maha, TrustMode 2, ESTEID jäta `CA`sse | **tehtud** — 403.16 / `800B0109` | masina juur puudub; kätluse vahelüli ei päästa. APP12-t ei korda (seal oli juur olemas) | — |
+| 3 | CTL sees, `ClientAuthIssuer` = **ainult** `EE-GovCA2018` (juur), ESTEID *ei* ole issuer-hoidlas. TrustMode **2** | tihti **200** | Exclusive CA lubab ahelal lõppeda juurikaga CTL-is; „pane juur ClientAuthIssuerisse” võib labis töötada ja tööl ikka petta | **jah** — näitab, miks juur vale kohta panna on ohtlik järeldus |
+| 4 | Sama mis 3, aga TrustMode **1** (Exclusive Root) + `ClientAuthIssuer` = ainult ESTEID2018 (vahelüli, mitte juur) | 403.16 / `800B0109` | Exclusive Root nõuab, et lõpp oleks **juur** selles hoidlas; vahelüli ei piisa | **jah** kui tahad TrustMode 0/1/2 vahet tunda |
+| 5 | CTL + lab-root **ainult Backend2-l** (`8444`); Backend1 jääb puhtaks. Klient `:9443` roundrobin | vahelduv 403.16 / 200 | „üks VM katki” — APP-id erinevad, LB vahetab | **jah** kui failover/RR on teema |
+| 6 | `SendTrustedIssuerList=1` + CTL ainult lab-root | kätlus katkeb või klient ei paku ID-kaarti; või 403.16 | loend on ~16 KB piiriga; tööl suur ettevõtte CTL | valikuline; sümptom on tihti teine kui 403.16 |
+| 7 | Eemalda ESTEID `CA`st, `disableaia` peal, **ilma** CTL-ita | päris kaardiga sageli **200** | kaart saadab vahelüli kätlusega; `no-aia` ei korda `800B0109` | ei tasu uuesti — juba nähtud |
+| 8 | Tühi `ClientAuthIssuer`, CTL *ei* ole, TrustMode 0 | **200** sellel Serveril | IIS 8+ „tühi CTL = 403.16” ei kordu siin | ei tasu uuesti |
+| 9 | `ocsp.smit.sise` kinni, tühistus **Disabled** | endiselt 200 või sama 403.16 mis #1, **mitte** 13 | OCSP müra | ei — tühistus off |
+| 10 | Tühistus **Enabled** + lab-proxy `deny` (WinHTTP `192.168.56.2:3128`) | **tehtud** — 403.13, TLS OK, WCF „Anonymous“ | ahel usaldatud; OCSP/CRL läks WinHTTP-st, mitte `Web.config`-ist. Päris URL-id: `http://aia.sk.ee/esteid2018/...`, `http://aia.sk.ee/ee-govca2018/...`, `http://c.sk.ee/EE-GovCA2018.crl`. `ocsp.smit.sise` ei käinud | `lockdown-ocsp.yml` + `.\lab.ps1 proxy deny` |
+
+Katsed 1–2 = 403.16 (CTL / puuduv juur). Katse 10 = 403.13 (proxy keelas SK OCSP). APP12 ei olnud see rada: seal tühistus Disabled.
+
+**Tööproxy vs lab.** `http://ocsp.smit.sise/ocsp` on ettevõtte sisene OCSP. ID-kaardi leht küsib serdis olevat URL-i (SK / eidpki). Mõlemad lähevad WinHTTP proxyst, kui `netsh winhttp show proxy` on seatud. Labis: host `.\lab.ps1 proxy deny` kuulab `0.0.0.0:3128`, guest WinHTTP `http://192.168.56.2:3128`, binding `verifyclientcertrevocation=enable`. `allow` + `.lab\proxy.log` näitab täpse URL-i nimekirja (tellimus). `timeout` kordab „The operation has timed out”, mitte kohest 403-t.
+
+---
+
+## Tööl kontrollida (labi järeldused)
+
+Päris ID-kaart `ESTEID2018` / `PNOEE-39904250267`, Hyper-V IIS (`WIN-R2NUJEQC8CV`), 20.09.2026. Töö raport: `RRMT-IdCardDiag-RR-MT-DEV-APP12-20260917-130221.txt`. Täpsemad katsed: [403.16 vs 403.13](#40316-vs-40313), URL-id: [AIA / OCSP / CRL](#url-id-mida-iis-peab-kätte-saama-aia--ocsp--crl).
+
+### Mis labis kindlaks tehti
+
+| # | Seis | Tulemus | Järeldus tööl |
+|---|---|---|---|
+| A | CTL `ClientAuthIssuer` = ainult lab-root; juur `Root`is olemas | **403.16** / `2148204809` (`0x800B0109`) | HTTP.sys usaldab **CTL-i**, mitte „Root/CA on korras”. APP12 sümptom. |
+| B | CTL maas; `EE-GovCA` **`Root`ist ära**; ESTEID `CA` + issuer | **403.16** / sama win32 | Kätluse vahelüli ei päästa puuduvat juurt. APP12-t ei korda (seal oli juur `Root`is). |
+| 10 | Tühistus **Enabled** + WinHTTP lab-proxy `deny` | **403.13** (TLS OK, WCF „Anonymous”) | Proxy/OCSP **ei** ole 403.16. Päris URL-id: `aia.sk.ee/esteid2018`, `aia.sk.ee/ee-govca2018`, `c.sk.ee/EE-GovCA2018.crl`. `ocsp.smit.sise` ei käinud. |
+| Puhas | Ansible taastas: tühistus off, CTL `(null)`, neli CA-d hoidlates | **PIN1 OK** (`WhoAmI`, `fc8c53fc`) → **PIN2 OK** (sama isik, `Backend1`) | Suletud VM + revocation off = login töötab **ilma SK aukudeta**. PIN2 on siin lokaalne allkiri, ajatemplit ei küsitud. |
+
+WCF tekst oli alati `client authentication scheme 'Anonymous'`. Päris kood on IIS alamstaatus (16 vs 13). `Web.config` proxy PIN1 kätlust ei mõjuta.
+
+### Kaks kihti — ära sega neid tööl kokku
+
+| Kiht | Küsimus | Kui puudu | Võrk? |
+|---|---|---|---|
+| **A. Ahel** | Kas neli CA faili on **igal** IIS-il õigetes hoidlates ja CTL ei filtreeri ESTEID-i välja? | **403.16** | Ei, kui failid tulevad Ansible `win_copy` / `certs/eid-ca` |
+| **B. Tühistus** | Kas `verifyclientcertrevocation` on sees **ja** WinHTTP näeb SK-d? | **403.13** | Jah: otse või korporatiivproxy |
+
+APP12 login suri kihil A (tühistus oli Disabled; `ocsp.smit.sise` timeout oli müra).
+
+### Küsimused, mida tööl küsida / mõõta
+
+Iga rida: **jah / ei / väärtus**. Käivita **igal** IIS VM-il (ühe masina roheline ei tõesta teist). APP12-l jäi `ClientAuthIssuer` ja `ClientAuthTrustMode` vaatamata.
+
+**1. Hoidlad (kiht A)**
+
+- [ ] `certutil -store Root` näitab `EE-GovCA2018` **ja** `EEGovCA2025`?
+- [ ] `certutil -store CA` näitab `ESTEID2018` **ja** `ESTEID2025`?
+- [ ] `certutil -store ClientAuthIssuer` näitab samu ESTEID vahelülisid (mitte ainult juuri)?
+- [ ] Sert on **LocalMachine**, mitte ainult CurrentUser / sinu desktop?
+- [ ] CA serdi omadustes on *Client Authentication* linnuke peal?
+
+**2. HTTP.sys / Schannel (kiht A, APP12)**
+
+```text
+netsh http show sslcert
+Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL |
+    Select-Object ClientAuthTrustMode, SendTrustedIssuerList
+```
+
+- [ ] Õige seos (kontrolli **nii** `0.0.0.0:443` kui masina IP:443 — need on erinevad)?
+- [ ] `Negotiate Client Certificate : Enabled`?
+- [ ] `Ctl Store Name` — `(null)` **või** `ClientAuthIssuer` kus ESTEID **on** kirjas? Tühi/vale CTL = katse A.
+- [ ] `ClientAuthTrustMode` väärtus? `1` = Exclusive Root (vahelüli issueris ei piisa). `2` + CTL ilma ESTEID-ita = sama 403.16.
+- [ ] `SendTrustedIssuerList` — kui `1`, kas CTL on väike ja sisaldab ESTEID-i?
+- [ ] `Disable Authority Info Access` Enabled → kohalik `CA` hoidla peab olema täielik.
+- [ ] IIS *Client Certificate Mapping* / *IIS Client Certificate Mapping* **väljas**?
+
+**3. Tühistus vs võrk (kiht B)**
+
+- [ ] Binding: `Verify Client Certificate Revocation` Enabled või Disabled? APP12-l oli **Disabled** — siis SK/smit auke login **ei** vaja.
+- [ ] Kui Enabled: kas väljuv on **otse** või **ainult proxy**? (Töö VM-il vaikimisi ei ole väljapääsu.)
+- [ ] `netsh winhttp show proxy` — kas **sama** proxy, mida masin tegelikult kasutab? `Direct access` + suletud NSG + revocation on = 403.13.
+- [ ] Kas `Web.config` `<defaultProxy>` / WCF SK URL on **ainus** koht, kuhu proxy pandi? Sellest ei piisa — HTTP.sys loeb WinHTTP-d.
+- [ ] Kas proxy laseb masinakonto / Local System **ilma 407-ta**?
+- [ ] Kas NSG/tellimus on ainult `:443`? OCSP/CRL on **:80**.
+
+Kui tühistus on sees, WinHTTP (otse või proxy allowlist) peab nägema:
+
+```text
+aia.sk.ee          :80     ESTEID2018 / GovCA2018 OCSP
+c.sk.ee            :80,:443  CRL + 2018 failid
+ocsp.eidpki.ee     :80     ESTEID2025 OCSP
+crl.eidpki.ee      :80     EEGovCA2025.crl
+crt.eidpki.ee      :80,:443  2025 failid
+ocsp.sk.ee         :80     varu
+```
+
+- [ ] Kas keegi tellib `ocsp.smit.sise` *ID-kaardi* jaoks? Seda PIN1 ei küsi. Tasub ettevõtte PKI jaoks, mitte APP12 403.16 paranduseks.
+- [ ] Õige test: `certutil -verify -urlfetch` IIS-il, mitte PowerShell `Invoke-WebRequest` / IE sinu kasutajaga.
+
+**4. Ansible / IaC (et roll ei tapaks loginit)**
+
+Mall: `ansible/inventories/work.example.yml`. Ära kopeeri labi `group_vars` proxyt (`192.168.56.2:3128`).
+
+- [ ] `eid_download_certs: false` ja neli faili on **kontrolleril** `certs/eid-ca`? (Suletud VM ei lae SK-st.)
+- [ ] `eid_revocation: false` **kuni** kiht B on tellitud ja WinHTTP paigas? `true` liiga vara = 403.13.
+- [ ] `eid_allow_lab_certificates: false` toodangus?
+- [ ] `eid_sslctl_store` tühi (vaikimisi) — CTL-i ei panda, kuni issuer on igal masinal täis?
+- [ ] `eid_winhttp_proxy` / `eid_wcf_default_proxy` = **töö** proxy või tühi, mitte labi aadress?
+- [ ] Roll jooksis **kõigil** `iis` hostidel (uus Nutanixi VM ilma rollita = vahelduv 403.16)?
+- [ ] GPO / CIS ei kirjuta pärast Ansible’it `ClientAuthIssuer`, `ClientAuthTrustMode` ega WinHTTP üle (`gpresult`)?
+- [ ] HAProxy `mode tcp` (TLS lõpeb IIS-is)? `mode http` + SSL = 403.7, mitte 16.
+- [ ] Health `:8080` `/health.json` **ilma** kliendiserdita?
+
+**5. Pärast esimest PIN1-t**
+
+- [ ] IIS W3C: `sc-status` / `sc-substatus` / `sc-win32-status` — 200, või 403 **16** `2148204809`, või 403 **13** `2148205075` (`0x80092013`)?
+- [ ] Kui 16: küsi punktid 1–2 (CTL vs juur). Kui 13: punkt 3.
+- [ ] Kas viga on **ühel** APP-il (nagu APP12) või kõigil? Üks masin = selle VM-i hoidla/CTL/WinHTTP, mitte HAProxy.
+- [ ] PIN2: see demo ei küsi SK ajatemplit. Töö juriidiline allkiri võib vajada eraldi URL-i — see ei ole PIN1.
+
+Taasta / võrdle labiga: `ansible-playbook -i work.yml iis.yml` (samad rollid mis `.\lab.ps1 ansible`).
+
+### Kust VM-ist vaadata, kui login ei õnnestu
+
+Kihid räägivad **järjest**. 403.7 / 13 / 16 sünnivad **enne** w3wp-d — siis on rakenduse logi tühi ja see on oodatav, mitte „logimine katki”. WCF ütleb alati `Anonymous`; päris kood on IIS `sc-substatus`. Labis koondab sama asja `.\lab.ps1 report` / `Get-EidReport.ps1` — all on **käsitsi teed täis-IIS VM-il**.
+
+| # | Kiht | Räägib millal | Kus sellel IIS VM-il | Mida otsid |
+|---|---|---|---|---|
+| 0 | Klient (mitte VM) | alati | `%LOCALAPPDATA%\IIS-ID\client.log` + nupp Diagnostika | PIN1 küsiti? päris `403.16` / `.13` / `.7` kehast; `correlation=` |
+| 1 | HAProxy / LB | päring ei jõua IIS-i | HAProxy `show stat`, rsyslog | backend UP/DOWN; `mode tcp`? |
+| 2 | HTTP.sys | kätlus katkeb enne saiti | `C:\Windows\System32\LogFiles\HTTPERR\httperr*.log` + `netsh http show sslcert` | `Timer_ConnectionIdle`, SSL; Negotiate / CTL / revocation |
+| 3 | IIS W3C | päring **jõudis saidini** | `%SystemDrive%\inetpub\logs\LogFiles\W3SVC*\*.log` | `sc-status` `sc-substatus` `sc-win32-status`. Puhverdab ~60 s. **UTC**. |
+| 4 | Failed Request Tracing | kui FREB 403 peale sees | `%SystemDrive%\inetpub\logs\FailedReqLogFiles\W3SVC*\` | 403.x XML (Ansible: `iis_enable_freb`) |
+| 5 | CAPI2 | ahel / OCSP (kui logi sees) | Event Viewer → *Apps and Services* → *Microsoft* → *Windows* → *CAPI2* → *Operational* | `800B0109` = 16, revocation offline = 13. Luba: `wevtutil sl Microsoft-Windows-CAPI2/Operational /e:true` |
+| 6 | Schannel | TLS / OCSP müra | Event Viewer → *System*, allikas **Schannel** | alert 48 unknown_ca; 36928 OCSP (`ocsp.smit.sise` võib olla müra, kui tühistus off) |
+| 7 | App pool / WAS | pool ei käivitu, recycle, 503 | *System* allikad **WAS**, **IIS-W3SVC**, **IIS-W3SVC-WP**; `Get-IISAppPool` | identity, crash; health 200 eraldi poolis petab HAProxy’t |
+| 8 | ASP.NET / w3wp | CLR / `web.config` | *Application*: **ASP.NET**, **.NET Runtime** | moodul ei laadi; **ei** selgita 403.16 |
+| 9 | Rakendus (WCF) | ainult kui IIS andis **200** | `Web.config` `serviceLogPath` (lab: `App_Data\service.log`; toodang: nt `D:\logs\demo\service.log`) | `WhoAmI` / `correlation=` / `backend=` / `pool=`. Tühi + kliendil 403 → loe rida 3, mitte siit. |
+| 10 | WinHTTP | tühistus / 403.13 | `netsh winhttp show proxy` | `Direct access` suletud VM-il |
+
+**Otsustus:** `service.log` tühi + klient 403 → rida 3 (IIS). `service.log`-is `WhoAmI` / poliitika → HTTP.sys lubas, viga on rakenduses. `HTTPERR` rida, IIS-is tühjus → kätlus suri HTTP.sys-is. Ühel APP-il 16, teisel 200 → selle VM-i hoidla/CTL (rida 3 + `certutil -store`), mitte HAProxy.
+
+```powershell
+# Igal katkisel IIS-il (Administrator), pärast üht ebaõnnestunud PIN1-t:
+netsh http show sslcert
+netsh winhttp show proxy
+Get-ChildItem $env:SystemDrive\inetpub\logs\LogFiles\W3SVC*\*.log |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1 |
+    ForEach-Object { Select-String -Path $_.FullName -Pattern ' 403 ' | Select-Object -Last 5 }
+Get-WinEvent -LogName 'Microsoft-Windows-CAPI2/Operational' -MaxEvents 20 -ErrorAction SilentlyContinue
+Get-Content (Get-ChildItem C:\Windows\System32\LogFiles\HTTPERR\httperr*.log | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName -Tail 20
+```
+
+IIS saidi logikaust: IIS Manager → sait → *Logging* → *Directory* (mitte alati vaikimisi `W3SVC1`). `sc-substatus` / `sc-win32-status` peavad olema W3C väljades — muidu näed ainult `403`. Täpsem labi voog: [Diagnostika](#diagnostika-üks-koht-kust-vaadata).
+
 ---
 
 ## Toodangu IIS: ID-kaardi ahel ja paigaldus
@@ -475,6 +750,7 @@ Kontroll `netsh http show sslcert`:
 | Verify Revocation with Cached Client Certificate Only | **Disabled** (ära jää ainult vahemällu) |
 | Usage Check | Enabled |
 | Ctl Store Name | `(null)` või `ClientAuthIssuer` (kui CTL kasutusel, hoidla ei tohi olla tühi) |
+| Disable Authority Info Access | Kui **Enabled**, peab kohalik `CA` hoidla sisaldama iga kasutusel oleva kaardigeneratsiooni väljastajat — HTTP.sys ei lae puuduvat lüli enam alla |
 
 Kliendisertifikaatide **filtreerimine** (valikuline, juhendi “lisakonfiguratsioon”): lisa `sslctlstorename=ClientAuthIssuer` ja `SendTrustedIssuerList=1`. Siis saadab server kliendile lubatud CA loendi. Vale/tühi CTL = 403.16.
 
@@ -512,24 +788,66 @@ mTLS **töötab TLS 1.2-ga täiesti korralikult**: `clientcertnegotiation=enable
 
 ## URL-id, mida IIS peab kätte saama (AIA / OCSP / CRL)
 
-HTTP.sys ehitab ahela **CAPI2 / Schannel** kaudu. Võrk käib **WinHTTP** kui **Local System** (või app pooli identiteet), **mitte** IE / “augud” kasutaja profiilis.
+HTTP.sys ehitab ahela **CAPI2 / Schannel** kaudu. Võrk käib **WinHTTP** kui **Local System**, **mitte** IE ega `Web.config` `<defaultProxy>`.
 
-Kui kesktaseme CA-d on **juba** LocalMachine\CA-s, AIA allalaadimist ahela *ehituseks* ei ole vaja — 403.16 kaob. **OCSP** on eraldi: `verifyclientcertrevocation=enable` => 403.13, kui need hostid on kinni.
+Töö VM-il **ei ole vaikimisi väljuvat ligipääsu**. Tellimus on kas **otse** nendele hostidele või **ainult korporatiivproxyle** (siis WinHTTP peab proxyle minema, proxy lubab allolevad URL-id, **ilma 407-ta** masinakontole).
+
+### Kaks kihti — ära telli kõike “igaks juhuks” ühe hunnikuna
+
+| Kiht | Vaja PIN1-ks? | Võrk | Kui puudu |
+|---|---|---|---|
+| **A. Ahel (usaldus)** | **Jah, alati** | **Ei**, kui neli CA faili on juba hoidlates (Ansible `win_copy` kontrollerilt) | **403.16** / `800B0109` |
+| **B. Tühistus (OCSP/CRL)** | Ainult kui `verifyclientcertrevocation=enable` | Jah — allolevad :80 (ja varu :443) | **403.13** / `80092013` |
+| WCF `Web.config` proxy | Ei (PIN1 kätlus) | Ainult kui rakendus ise teeb `revocationMode=Online` või PIN2 ajatempli | rakenduse viga, mitte IIS 403.16 |
+| `ocsp.smit.sise` | **Ei** | Ettevõtte PKI müra | Schannel 36928; APP12-l tühistus off → ei tapa loginit |
+
+Suletud VM + Ansible vaikimisi (`eid_revocation: false`, `eid_download_certs: false`): **PIN1 töötab ilma ühegi SK auguta**, kui `certs/eid-ca` on kontrolleril ja roll jookseb **igal** IIS-il. Tühistus lülita sisse alles pärast kihi B tellimust + `netsh winhttp show proxy`.
+
+### Kiht A — failid (kord, paigalduseks)
+
+RIA juhend: [IIS veebiserverile ID-kaardi toe seadistamine](https://open-eid.github.io/iis/index.et.html). Allalaadimine on vaja **ainult kontrolleril** või kui `eid_download_certs: true`.
+
+| Fail | URL (juhend) | Port | Hoidla |
+|---|---|---|---|
+| `EE-GovCA2018` | `https://c.sk.ee/EE-GovCA2018.der.crt` | 443 | **Root** |
+| `EEGovCA2025` | `https://crt.eidpki.ee/EEGovCA2025.crt` | 443 | **Root** |
+| `ESTEID2018` | `http://c.sk.ee/esteid2018.der.crt` (HTTPS ka) | 80 / 443 | **CA** + **ClientAuthIssuer** |
+| `ESTEID2025` | `https://crt.eidpki.ee/ESTEID2025.crt` | 443 | **CA** + **ClientAuthIssuer** |
+
+Organisatsiooni kaardid (ainult kui neid kasutate): `EID-SK 2016` → `https://www.sk.ee/upload/files/EID-SK_2016.der.crt` ka **CA** + **ClientAuthIssuer**.
+
+Ansible **ei** pane vaikimisi `sslctlstorename`. CTL + puudulik issuer = APP12 403.16.
+
+### Kiht B — mida HTTP.sys kätluse ajal päriselt küsib
+
+RIA: ESTEID2018 OCSP `http://aia.sk.ee/esteid2018`, ESTEID2025 OCSP `http://ocsp.eidpki.ee`. Lab (päris kaart, 20.09.2026, WinHTTP → lab-proxy):
 
 | URL | Port | Milleks |
 |---|---|---|
-| https://c.sk.ee/EE-GovCA2018.der.crt | 443 | Juurika fail / AIA |
-| https://c.sk.ee/esteid2018.der.crt | 443 | ESTEID2018 kesktase / AIA |
-| https://crt.eidpki.ee/EEGovCA2025.crt | 443 | 2025 juur |
-| https://crt.eidpki.ee/ESTEID2025.crt | 443 | 2025 kesktase |
-| **http://aia.sk.ee/esteid2018** | **80** | ESTEID2018 **OCSP** (kirjas kaardi AIA-s) |
-| http://aia.sk.ee/EE-GovCA2018 | 80 | Juurika OCSP |
-| **http://ocsp.eidpki.ee** | **80** | ESTEID2025 OCSP |
-| http://ocsp.sk.ee | 80 | SK OCSP (vanem / varu) |
-| http://c.sk.ee/crls/esteid/esteid2018.crl | 80 | CRL, kui OCSP ei õnnestu |
-| http://www.sk.ee/crls/esteid/esteid2018.crl | 80 | CRL varu |
+| **`http://aia.sk.ee/esteid2018/...`** | **80** | ESTEID2018 lehe OCSP (kirjas kaardi AIA-s) |
+| **`http://aia.sk.ee/ee-govca2018/...`** | **80** | juurika OCSP (HTTP.sys küsis koos kaardiga) |
+| **`http://c.sk.ee/EE-GovCA2018.crl`** | **80** | CRL, kui OCSP keelatakse / ei vasta |
+| `http://aia.sk.ee/EE-GovCA2018` | 80 | sama juur, teine tee (juhend / certutil) |
+| **`http://ocsp.eidpki.ee`** | **80** | ESTEID2025 lehe OCSP (RIA; 2018 kaart seda ei küsinud) |
+| **`http://crl.eidpki.ee/EEGovCA2025.crl`** | **80** | 2025 juurika CRL (`ESTEID2025.crt` CDP) |
+| `http://crt.eidpki.ee/EEGovCA2025.crt` | 80 | 2025 juur AIA-st (HTTP, mitte ainult 443) |
+| `http://ocsp.sk.ee` | 80 | vanem SK OCSP / varu |
+| `http://c.sk.ee/crls/esteid/esteid2018.crl` | 80 | ESTEID2018 CRL varu |
+| `http://www.sk.ee/crls/esteid/esteid2018.crl` | 80 | CRL varu |
 
-Tulemüür / proxy: luba IIS VM-idelt **väljuv HTTP 80** (OCSP on tavaliselt HTTP, mitte 443) ja **HTTPS 443** SK/eidpki allalaadimiseks. Sise-VM ilma vaikimisi gatewayta = OCSP sureb, isegi kui “IE-s augud” töötavad sinu kasutajaga.
+Tellimuse lühike nimekiri (otse **või** proxy allowlist, HTTP.sys = WinHTTP, **mitte** kasutaja IE):
+
+```text
+Hostid:  aia.sk.ee  ocsp.eidpki.ee  ocsp.sk.ee  c.sk.ee  crt.eidpki.ee  crl.eidpki.ee
+Pordid:  TCP 80  ja  TCP 443
+Auth:    masinakonto / Local System — proxy 407 = 403.13
+```
+
+`crt.eidpki.ee:443` on 2025 failide jaoks (kiht A). OCSP/CRL on **:80** — NSG ainult 443 = tühistus ikka 403.13. `crl.eidpki.ee` oli varem nimekirjast puudu.
+
+PIN2 selles demos on **lokaalne** allkiri (ajatemplit SK-st ei küsita). Toodangu allkirjastamine võib vajada eraldi ajatempli URL-i — see ei ole PIN1.
+
+Kui kesktaseme CA-d on **juba** LocalMachine\CA-s, AIA allalaadimist ahela *ehituseks* ei ole vaja — 403.16 kaob. **OCSP** on eraldi: `verifyclientcertrevocation=enable` => 403.13, kui kiht B on kinni.
 
 WinHTTP süsteemiproxy (Administrator, **iga** IIS):
 
@@ -724,7 +1042,14 @@ FILE ...\lastclient.cer
 
 Kui mõni rida on `Failed`, ütleb verdikt ka põhjuse: `12016` / „requires user authentication" = **proxy nõuab 407 autentimist**, `12002` = aegumine (suur CRL või aeglane proxy), `0x80092013` = tühistusteenus kättesaamatu (403.13 rada), `0x800B0109` = ahel ei ole usaldatud (403.16 rada).
 
-Kaks asja, mis muidu eksitavad:
+Kolm asja, mis muidu eksitavad:
+
+- **Proxy taga on 3b sektsioon eksitav.** 3b teeb **otse** TCP-ühendusi SK/eidpki hostidele. Kui masin käib väljapoole ainult süsteemiproxy kaudu, näitab see FAIL-i ka siis, kui tühistus töötab, ja vastupidi: port võib vastata, aga proxy nõuab autentimist. Proxy keskkonnas on otsustav 3c (`certutil -verify -urlfetch`, mis kasutab WinHTTP seadeid) ja käsitsi kontroll:
+
+```powershell
+netsh winhttp show proxy                         # proxy + bypass-list
+Invoke-WebRequest -Uri <ocsp-url> -Proxy <proxy-url> -UseBasicParsing -TimeoutSec 15
+```
 
 - **IIS logi puhverdab kuni ~60 s.** Kui käivitad raporti kohe pärast viga, võib rida veel puududa. Raport ütleb siis „no 403/4xx/5xx in the last N min“ — oota hetk ja käivita uuesti, ära järelda, et kõik on korras.
 - **Ajatemplid IIS logis on UTC**, sündmuselogis kohalik aeg. Raport arvestab sellega, aga kui võrdled käsitsi, ära jahi „kadunud“ ridu vale tunniga.
@@ -896,9 +1221,28 @@ WCF `forbidden ... scheme 'Anonymous'` = loe IIS **alamstaatus** 16 või 13, är
 | `diagnose` | Koondraport failina: hoidlad, HTTP.sys, WinHTTP, SK URL-id, CAPI2, Schannel, IIS/HTTPERR, rakenduse logid |
 | `report` / `report 15` | Sama raport ja avab selle kohe (vaikimisi 30 min aken) |
 | `probe` / `probe-stop` | `Demo.CertProbe` pordil 9444: ava ID-kaardiga, saad verdikti 403.7 / 403.13 / 403.16 / OK; salvestab serdi `.lab\lastclient.cer` |
+| `proxy [mode]` / `proxy-stop` | Logiv lab-proxy pordil 3128: näitab, **mis URL-e Windows ise küsib**. `allow` / `allowlist` / `auth407` / `deny` / `timeout` |
+| `lockdown [nimi]` | **ADMIN:** tee masinast suletud võrgu server. Ilma nimeta = status. `hosts-blackhole` / `system-no-net` / `proxy-only` / `dead-proxy` / `no-aia` / `no-issuer` |
+| `unlock` | **ADMIN:** võtab kõik lockdown-muudatused tagasi |
 | `haproxy` / `haproxy-stop` | Docker HAProxy TCP passthrough |
+| `hyperv` / `vm` / `vm-start` / `vm-check` / `vm-fix` | Hyper-V suletud võrgu VM (vt [peatükk 24](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm)) |
+| `iac` | Ansible kontrollsõlm WSL-i (ansible-core + Windows collectionid) |
+| `ansible-ping` | WinRM `win_ping` guestile `192.168.56.10` (`$env:LAB_WINRM_PASSWORD`) |
+| `ansible` | Sama IIS/ESTEID/WinHTTP roll mis Nutanixis; buildib ja teeb ClickOnce `/install` enne |
+| `publish` | ClickOnce paigaldus `publish\clickonce` (leht: `http://demo.local:8080/install/`) |
+| `tf` / `tf apply` | Terraform juur `terraform/hyperv` (switch + VM; destroy ei kustuta Windowsit) |
 
-Diagnostika täpsem selgitus: [Diagnostika: üks koht, kust vaadata](#diagnostika-üks-koht-kust-vaadata).
+Diagnostika täpsem selgitus: [Diagnostika: üks koht, kust vaadata](#diagnostika-üks-koht-kust-vaadata). Suletud võrgu stsenaariumid ja VM: [Suletud võrgu lab](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm).
+
+Skriptid, mida `lab.ps1` ei mähi:
+
+| Skript | Mis |
+|---|---|
+| `scripts\Set-LabLockdown.ps1 <nimi> -Preview` | näitab täpselt, mida muudetakse, ilma muutmata |
+| `scripts\Start-LabProxy.ps1 allow -Bind any` | proxy ka VM-idele (host = ainus tee välja) |
+| `scripts\Install-LabServer.ps1` | **VM-i sees, ilma Ansible'ta:** päris IIS, app poolid, W3C alamstaatus, valikuline FREB |
+| `scripts\Enable-LabWinRm.ps1` | **VM-i sees, kord:** staatiline IP + WinRM HTTP:5985, et host saaks Ansible’t joosta |
+| `scripts\Install-LabIac.ps1` | Hostis: ansible-core WSL-i (`.\lab.ps1 iac`) |
 
 ---
 
@@ -908,6 +1252,7 @@ Diagnostika täpsem selgitus: [Diagnostika: üks koht, kust vaadata](#diagnostik
 |---|---|
 | `https://demo.local:9443/Demo.svc` | Klient läbi balanceri (mTLS) |
 | `http://127.0.0.1:8404/` | LB juhtimine: Kinni / Käima / drain / roundrobin |
+| `http://demo.local:8080/install/` | ClickOnce paigaldusleht (ilma PIN1 / kliendiserdita) |
 | `http://127.0.0.1:8080/health.json` | Backend1 health (ilma serdita) |
 | `http://127.0.0.1:8081/health.json` | Backend2 health |
 | `https://127.0.0.1:8443/Demo.svc` | Otse Backend1 (mööda balancerist) |
@@ -920,7 +1265,32 @@ Klient peab kasutama nime **`demo.local`**, sest WCF DNS-identiteet ja serveri s
 
 ## Terraform ja Ansible
 
-See repo **ei ole** Terraform/Ansible kood. Töö infra on juba IaC. Alljärgnev on checklist, et PIN1/mTLS tükid ei jääks “käsitsi ühele VM-ile”, mis on tüüpiline 403.16 põhjus (üks IIS-il ahel olemas, teisel mitte).
+Kood on repos:
+
+| Kaust | Mis | Kas kodus `apply` / playbook |
+|---|---|---|
+| [`terraform/hyperv`](terraform/hyperv) | Internal switch + Windows Server VM (kutsub `New-LabVm.ps1`) | jah, kui Hyper-V ja ISO on olemas. Olemasolev `IIS-ID-Server` = no-op |
+| [`terraform/nutanix`](terraform/nutanix) | 2 IIS-i + 1 HAProxy, subnet, image — **töö mall** | ei. Kopeeri töö IaC-sse, ära rakenda Prismile siit labist |
+| [`ansible/`](ansible) | `eid_trust`, `winhttp_proxy`, `iis_eid`, `haproxy_passthrough` | jah, vastu guest’i `192.168.56.10` pärast WinRM-i |
+
+Hüperviisori Terraform **ei kanna üle** (erinev provider). Ansible rollid **kannavad**: nad räägivad Windowsi, HTTP.sys-i ja HAProxy `mode tcp` peale, mitte Prismiga ega Hyper-V-ga. Pikem seletus: [`terraform/README.md`](terraform/README.md), [`ansible/README.md`](ansible/README.md).
+
+```powershell
+# guestis, kord (pärast Windows Setupi):
+powershell -File C:\IIS-ID\scripts\Enable-LabWinRm.ps1 -StaticIp 192.168.56.10
+
+# hostis:
+.\lab.ps1 certs
+.\lab.ps1 iac                          # ansible-core WSL-i
+$env:LAB_WINRM_PASSWORD = '<VM Administrator>'
+.\lab.ps1 ansible-ping
+.\lab.ps1 ansible                      # IIS + ESTEID + WinHTTP; sama roll mis Nutanixis
+# .\lab.ps1 tf plan                    # valikuline; VM on sul juba olemas
+```
+
+`Install-LabServer.ps1` jääb alles: see on sama töö **ilma** Ansible’ta, kui WinRM-i veel pole. Ära jooksuta mõlemat järjest vastuollu minevate muutujatega — vali üks.
+
+Alljärgnev checklist on selleks, et PIN1/mTLS tükid ei jääks “käsitsi ühele VM-ile”, mis on tüüpiline 403.16 põhjus (üks IIS-il ahel olemas, teisel mitte).
 
 ### Mis kuhu kuulub
 
@@ -939,7 +1309,7 @@ See repo **ei ole** Terraform/Ansible kood. Töö infra on juba IaC. Alljärgnev
 Terraform **security group / NSG**, mida inimesed unustavad:
 
 - Sisse: HAProxy → IIS `:443` (mTLS) ja HAProxy → IIS `:8080` (health).
-- Välja **igalt IIS-ilt**: HTTP 80 ja HTTPS 443 `aia.sk.ee`, `ocsp.eidpki.ee`, `c.sk.ee`, `crt.eidpki.ee` **või** ainult korporatiivproxy (siis WinHTTP peab sellele proxyle minema).
+- Välja **igalt IIS-ilt** (ainult kui tühistus on sees): HTTP 80 ja HTTPS 443 `aia.sk.ee`, `ocsp.eidpki.ee`, `c.sk.ee`, `crt.eidpki.ee`, `crl.eidpki.ee` **või** ainult korporatiivproxy + WinHTTP. PIN1 usaldus (403.16) SK auku ei vaja.
 - “VM-il pole internetti, IE-s on augud” + Terraform default-deny egress = OCSP **403.13**, isegi kui Ansible pani `Web.config` proxy.
 
 ### Ansible: idempotentne IIS-i roll (kõik backend’id)
@@ -981,14 +1351,16 @@ Terraform NSG egress ja Ansible WinHTTP peavad **sama** proxy või **sama** SK C
 
 ### Lab vs töö IaC
 
-| Lab (`lab.ps1`) | Töö |
+| Lab | Töö (Nutanix) |
 |---|---|
-| `bind` / `eid-ca` käsitsi admin | Ansible roll igal boot/deploy |
-| `backends.txt` | Terraform private IP-d + Ansible HAProxy template |
-| Stats Kinni | Ansible drain + Terraform/HAProxy server state või instance stop |
-| Üks Windows 11 | `count` / ASG IIS-idest; roll **kõigile** |
+| `terraform/hyperv` + `New-LabVm.ps1` | `terraform/nutanix` (päris `nutanix` provider, töö repos) |
+| `ansible/inventories/lab.yml` (`192.168.56.10`, kaks saiti ühel VM-il) | `inventories/work.example.yml` või TF väljund `ansible_inventory` (üks sait `:443` per VM) |
+| `.\lab.ps1 ansible` | `ansible-playbook -i work.yml site.yml` — **samad rollid** |
+| `bind` / `eid-ca` / `Install-LabServer.ps1` | asendatud Ansible rollidega; skriptid jäävad varuvariandiks |
+| Docker HAProxy hostil | Linux VM + `haproxy_passthrough` |
+| Stats Kinni | Ansible drain + HAProxy server state või instance stop |
 
-Ära pane Terraform state’i ega Ansible vaulti asemel labi `certs/*.pfx` toodangusse. See repo on käitumise mustand; IaC jääb töö reposse, aga checklist peab olema sama: ahel, Negotiate, WinHTTP, health port, passthrough.
+Ära pane Terraform state’i ega Ansible vaulti asemel labi `certs/*.pfx` toodangusse. Lab CA parool `lab` on ainult selle repo jaoks.
 
 ---
 
@@ -1059,22 +1431,24 @@ Tähelepanu: `DemoHostFactory` seab `PeerOrChainTrust` koodis, mitte configist. 
 | **`balance source` + NAT** | Kui kliendid tulevad korporatiivsest NAT-ist, on kõigil sama IP → **kõik** ühte IIS-i. Kaks HAProxy kihti ilma PROXY protocolita annavad sama tulemuse. |
 | **Isikukood logides** | `sc-status` read ja rakenduse logid sisaldavad isikuandmeid. Maskeerimine + säilitustähtaeg. |
 | **`SendTrustedIssuerList=1`** | Muudab seda, mida kliendi sertifikaadivaliku aken näitab. Testi ClickOnce kliendiga, enne kui toodangusse paned. |
+| **`ClientAuthTrustMode` ja `ClientAuthIssuer` käivad koos** | Kui turvabaseline seab range režiimi (ahel peab lõppema `ClientAuthIssuer` hoidlas), peab see hoidla olema **igal** masinal täidetud. Range režiim + tühi hoidla = 403.16 igale kaardile, ka siis kui `Root` ja `CA` on laitmatud — ja rakenduse enda kontroll ütleb samal ajal „kehtiv". |
+| **`disableaia`** | Kui AIA-allalaadimine on keelatud, ei tohi kohalikust `CA` hoidlast puududa ühegi kasutusel oleva kaardigeneratsiooni väljastaja. Uue generatsiooni kaardi kasutuselevõtt on siis eraldi paigaldustöö, mitte „tuleb ise". |
 
 ### 7. Mida see lab ei ole tõestanud
 
 Aus nimekiri, et sa ei loeks labi rohelist tulemust rohkemaks, kui see on:
 
-- **Päris ID-kaardiga pole läbi käidud** — `certs/eid-ca/` failid on olemas, aga PIN1/PIN2 dialoogi vooga pole testitud. Tee `eid-ca` → `bind` → `start` → kaart lugejasse.
-- **Tühistus (OCSP online) on labis välja lülitatud** — `verifyclientcertrevocation=disable` + `RevocationMode=NoCheck`. Seega 403.13 stsenaariumi labis reprodutseeritud pole, ainult dokumenteeritud.
+- **Päris ID-kaart on PIN1-ga läbi käidud** (ESTEID2018). Vaikimisi labis on tühistus off → 200. Katse 10 (revocation + proxy deny) andis **403.13**.
+- **Tühistus on vaikimisi väljas** (`verifyclientcertrevocation=disable` + `RevocationMode=NoCheck`). 403.13 tuleb ainult `lockdown-ocsp.yml` + `.\lab.ps1 proxy deny` peale. `.\lab.ps1 ansible` paneb tühistuse jälle kinni.
 - **Kaks füüsilist masinat, kaks HAProxy kihti, PROXY protocol** — konfid on olemas (`haproxy/haproxy-production.cfg`), testitud on üks Windows 11 masin.
-- **ClickOnce deploy** — labis on tavaline `.exe`.
+- **ClickOnce deploy on olemas** — `.\lab.ps1 publish` (või `start` / `ansible`) paneb lehe `http://demo.local:8080/install/`. See URL **ei tohi** nõuda kliendisertifikaati; PIN1 tuleb alles `Demo.svc` peal. Firefox laadib `.application` faili alla; ava Edge’is.
 - **IIS Express ≠ täis-IIS** — app pooli recycle’i, Failed Request Tracingut ja W3C `sc-substatus` käitumist saab päriselt kontrollida ainult Windows Serveris.
 
 ### Järjekord, kuidas ma seda tööle viiksin
 
 1. Kontrolli töö `Web.config` sessiooni-seaded (punkt 1). See otsustab, kas failover on üldse võimalik.
 2. Aja Ansible’iga ahel + `Negotiate Client Certificate` + WinHTTP **kõigile** IIS-idele ja lase `scripts/Test-EidAfterPin1.ps1` igal hostil läbi. Ükski host ei tohi FAIL-i anda.
-3. Jäta TLS 1.2 lubatuks, tõesta kätlus ühe IIS-i vastu **ilma** HAProxy-t (`https://iis1.fqdn/...`). Kui siin on 403.16, ei ole HAProxy süüdi.
+3. Jäta TLS 1.2 lubatuks, tõesta kätlus ühe IIS-i vastu **ilma** HAProxy-t (`https://iis1.fqdn/...`). Kui siin on 403.16, ei ole HAProxy süüdi — võrdle siis `ClientAuthTrustMode`, `ClientAuthIssuer` sisu ja `disableaia` seadeid **koos**, mitte ükshaaval (vt [403.16 vs 403.13](#40316-vs-40313)).
 4. Alles siis pane HAProxy `mode tcp` ette ja kontrolli, et health tuleb WCF-i app poolist.
 5. Failoveri test: võta üks IIS drain’i, tee klientis päring, vaata et backend nimi muutus ja kasutaja viga ei näinud.
 6. Alles siis lülita sisse `verifyclientcertrevocation=enable` ja vaata, kas OCSP jõuab kohale (403.13 tuleb siin, mitte varem).
@@ -1141,6 +1515,7 @@ Labis on tühistus välja lülitatud, seega neid vigu siin ei teki. Toodangus on
 | Parameeter | Mida teeb / kuidas tagasi lööb |
 |---|---|
 | `verifyclientcertrevocation` | tühistuse kontroll sisse/välja; võrguprobleem = 403.13 |
+| `disableaia` | kui `enable`, ei lae HTTP.sys puuduvat vahelüli AIA-st alla → kohalik `CA` hoidla peab olema **täielik**, sh uue kaardigeneratsiooni väljastaja. Muidu 403.16 (`0x800B0109`) |
 | `verifyrevocationwithcachedclientcertonly` | kui `enable`, kasutab ainult vahemälu → värsket tühistust ei märka |
 | `revocationfreshnesstime` | 0 = vana CRL kehtib kuni oma kehtivusaja lõpuni; sekundid sunnivad uuendama |
 | `urlretrievaltimeout` | SK CRL on suur; liiga lühike = 403.13 just tippkoormusel |
@@ -1197,6 +1572,17 @@ Muster: iga N-i katse ebaõnnestub. `service.log`-i `backend=` väli ütleb, mil
 - FIPS-režiim (GPO) → osa algoritme keelatud, .NET viskab „not FIPS compliant".
 - Kuupäevased Windows-uuendused muudavad Schanneli vaikeseadeid (eemaldavad ciphereid) — sama sümptom nagu vale baseline.
 
+### 14. Diagnostikaskripti enda lõksud
+
+Kui kirjutad oma koguja-skripti (või loed kellegi teise oma), on need vead kallimad kui see, mida sa otsid — vale roheline saadab tõrkeotsingu mitmeks päevaks kõrvale.
+
+- **Skript tekitab ise neid sündmusi, mida ta loeb.** Iga ahelaehitus sinu skripti sees (ka `certutil`) kirjutab CAPI2 logisse oma read. Kui filter on lai ja ridade arv piiratud, täidab skript selle akna oma müraga ja tegeliku kätluse ahelaehitus ei mahu sisse. Filtreeri esitatud serdi thumbprindi järgi ja arvesta, et kätluse teeb **süsteemiprotsess**, mitte sinu PowerShell.
+- **Sektsioon, mis ei jooksnud, ei tohi paista kontrollituna.** Skripti enda parameetriviga või ajalimiit peab jõudma verdiktini eraldi reana („SKIPPED" / „ERROR"), muidu jääb mulje, et kõige otsustavam kontroll on tehtud ja tulnud puhas.
+- **PASS/FAIL nimekiri peab ütlema ka selle, mida ta ei tõestanud.** Kui raportis on ainult need kontrollid, mida on lihtne teha, saad lehe rohelist ja ikka mitte põhjust. Usaldusotsuse jaoks on vaja **esitatud serdi väljastajat** ning `ClientAuthIssuer` + `ClientAuthTrustMode` — ilma nendeta on 403.16 kohta võimatu midagi öelda.
+- **Roheline TCP-test ei tõesta tühistust.** Port võib vastata ja OCSP ikka mitte töötada (407, MITM, vale marsruut). Proxy taga tuleb testida **läbi süsteemiproxy** ja arvestada bypass-listi.
+- **Eralda ettevõtte sisese PKI vead ID-kaardi omadest.** Sisemise tühistusteenuse tõrked täidavad sündmuselogi ka siis, kui ID-kaardi rajaga pole neil mingit pistmist. Kui tühistus on bindingul välja lülitatud, ei saa need olla 403.16 põhjus — ütle see raportis välja.
+- **Ära kopeeri raportisse rohkem isikuandmeid, kui vaja.** Sertifikaadi subjektis on nimi ja isikukood. Tõrkeotsinguks piisab thumbprindist ja väljastajast; isikukood maski taha.
+
 ### Sümptomite kiirtabel
 
 | Sümptom | Tõenäoline põhjus | Kust vaadata |
@@ -1205,6 +1591,7 @@ Muster: iga N-i katse ebaõnnestub. `service.log`-i `backend=` väli ütleb, mil
 | Kliendis „sertifikaate ei leitud" | kaardi läbisuunamine, CertPropSvc, trusted issuer list | `certutil -scinfo`, kliendi Diagnostika |
 | 403.7 ainult brauserist | HTTP/2 + renegotiation | `netsh http show sslcert`, `EnableHttp2Tls` |
 | 403.16 tuleb päevade pärast tagasi | GPO kirjutas hoidla üle | `gpresult /h`, raport enne/pärast `gpupdate /force` |
+| Rakendus logib „sert kehtiv", IIS annab ikka 403.16 | HTTP.sys usaldab teisi hoidlaid kui rakendus | `certutil -store ClientAuthIssuer`, `ClientAuthTrustMode`, `disableaia` — vt [403.16 vs 403.13](#40316-vs-40313) |
 | 403.13 ainult tippkoormusel | `urlretrievaltimeout`, suur CRL, proxy 407 | `certutil -verify -urlfetch`, proxy logi |
 | Iga teine päring ebaõnnestub | üks backend erineb | `service.log` `backend=`, raport igal masinal |
 | Kätlus katkeb, IIS-i logis pole rida | serveri serdi võti või Schannel baseline | Schannel 36870/36874, HTTPERR |
@@ -1215,10 +1602,16 @@ Muster: iga N-i katse ebaõnnestub. `service.log`-i `backend=` väli ütleb, mil
 Kõige kiirem viis diagnostikat usaldama õppida on vead ise sisse panna. Tee seda **ainult lab-masinas** ja taasta pärast.
 
 ```powershell
-# 403.16: eemalda vahepealne CA ClientAuthIssuer hoidlast
+# 403.16 (APP12 sümptom): CTL ClientAuthIssuer ilma ESTEID-ita — vt ülal
+# ansible/lockdown-app12.yml   seejärel päris kaart :8443
+# Ära looda ainult: certutil -delstore ClientAuthIssuer ESTEID2018
+# Päris kaart saadab vahelüli kätlusega; ilma CTL-ita võib IIS jääda 200 peale.
+
+# 403.16 vanem / teine tee: eemalda vahepealne CA ClientAuthIssuer hoidlast
 certutil -delstore ClientAuthIssuer "ESTEID2018"
-.\lab.ps1 probe            # ava kaardiga -> verdikt peab olema [403.16]
+.\lab.ps1 probe            # ava kaardiga -> verdikt [403.16] *kui* exclusive/CTL on aktiivne
 .\lab.ps1 eid-ca           # taasta
+.\lab.ps1 ansible          # VM: taasta hoidlad + binding (eemaldab labi CTL-i, kui ansible seda üle kirjutab)
 
 # 403.7: keela sertifikaadi küsimine ühel seosel
 netsh http update sslcert ipport=127.0.0.1:8443 certhash=<thumb> appid={00112233-4455-6677-8899-AABBCCDDEEFF} clientcertnegotiation=disable
@@ -1234,6 +1627,198 @@ Add-Content $env:WINDIR\System32\drivers\etc\hosts "127.0.0.2 aia.sk.ee"
 ```
 
 Iga kord kontrolli, et `.\lab.ps1 report` verdikt näitab **sama**, mida sa katki tegid. Kui ei näita, on diagnostikas auk — ja parem leida see kodus.
+
+Need käsud on käsitsi variant. Sama asi ühe käsuga ja automaatse tagasivõtmisega (pluss suletud võrgu stsenaariumid, mida käsitsi teha ei saa) on järgmises peatükis: [Suletud võrgu lab](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm).
+
+---
+
+## Suletud võrgu lab: lockdown, proxy ja Windows Server VM
+
+Kodune masin on „kõik lubatud", karastatud server on „kõik keelatud, iga URL tuleb eraldi tellida". Enamik selle repo peatükke kirjeldab vigu, mida **internetiga masin ise ära peidab**: puuduv vahelüli laetakse AIA-st, OCSP vastab, DNS lahendab. Siin peatükis on kolm taset, kuidas see peitmine kodus välja lülitada — kõige kergemast kõige tõetruumani.
+
+| Tase | Tööriist | Mida annab |
+|---|---|---|
+| 1 | `.\lab.ps1 lockdown <stsenaarium>` | kirurgiline keelamine samas masinas, minutiga peale ja maha |
+| 2 | `.\lab.ps1 proxy` | **nimekiri URL-idest, mida Windows ise küsib** — täpselt see, mida tööl tellima pead |
+| 3 | Windows Server VM host-only võrgus | päris IIS, päris app poolid, ainus tee välja on host |
+
+### 1. Lockdown: keela see, mida tööl vaikimisi ei lubata
+
+`scripts\Set-LabLockdown.ps1` (ADMIN) lülitab sisse ühe olukorra korraga ja kirjutab muudatused faili `.lab\lockdown.json`, et need täpselt tagasi võtta. Eelvaade ilma muutmata: lisa `-Preview`.
+
+| Stsenaarium | Mida muudab | Mida tõestab |
+|---|---|---|
+| `hosts-blackhole` | PKI hostinimed → marsruutimatu IP (203.0.113.x) + tulemüür kukutab vaikselt | AIA/CRL/OCSP **aegumine** (mitte „refused") — nii käitub päris tulemüür |
+| `system-no-net` | blokeerib 80/443 **ainult** `lsass` / `iisexpress` / `w3wp` jaoks | sinu `Invoke-WebRequest` ja `certutil` annavad ikka PASS, aga kätluse rada on surnud. Kõige olulisem stsenaarium: näitab, miks „ma testisin, URL vastas" ei tõesta midagi |
+| `proxy-only` | blackhole + masina **WinHTTP** proxy lab-proxy peale | ainult proxy kaudu töötav maailm; proxy logi näitab iga küsitud URL-i |
+| `dead-proxy` | WinHTTP proxy pordile, kus keegi ei kuula | „proxy on tellimata / kirjaviga" sümptom OS-i poolelt |
+| `no-aia` | `disableaia=enable` + eemaldab ESTEID vahelülid `CA` hoidlast (varundab) | suletud võrgus pole puuduvat vahelüli kuskilt võtta → 403.16 (`0x800B010A`), **kui klient vahelüli kätluses ei saada**. Päris ESTEID2018 kaart sageli saadab; siis jääb 200, kuni juur `Root`is on | 
+| `no-issuer` | tühjendab `ClientAuthIssuer` hoidla (varundab) | „rakendus ütleb kehtiv, IIS 403.16” **ainult kui** exclusive/CTL on päriselt aktiivne. Uuemal Serveril tühi hoidla ilma CTL-ita ei pruugi 403.16 anda. APP12 sümptom: [lockdown-app12.yml](#app12-40316-kui-root-ja-ca-näivad-korras) |
+
+Kõik tagasi: `.\lab.ps1 unlock`. Seis: `.\lab.ps1 lockdown` (ilma nimeta = status).
+
+Mida see **ei** tee: internetti tervikuna kinni ei pane. Hostinimede nimekiri on kitsas, protsessireeglid katavad kolme protsessi, ja WinHTTP on masinataseme säte, mida brauserid ei loe. Ainus laiem kõrvalmõju: blokeeriva proxy-režiimi ajal kannatavad ka teised WinHTTP kasutajad (nt Windows Update) — hoia need seansid lühikesed.
+
+### 2. Lab-proxy: tellimisnimekiri, mida sa muidu pead ära arvama
+
+Suletud võrgus on kõige kallim teadmatus lihtne: **millised URL-id peavad üldse lubatud olema?** Dokumentatsioon ütleb üht, päris kätlus küsib teist (teine CA generatsioon, teine CRL host, ajatempel). `scripts\Start-LabProxy.ps1` on pisike edasisuunav proxy, mille ainus mõte on see nimekiri kirja panna.
+
+```powershell
+.\lab.ps1 proxy             # allow: suunab edasi ja logib iga URL-i
+.\lab.ps1 proxy allowlist   # ainult -Allow hostid, ülejäänud 403 (osa tellitud)
+.\lab.ps1 proxy auth407     # proxy nõuab autentimist (masinakonto ei oska)
+.\lab.ps1 proxy deny        # proxy poliitika keelab
+.\lab.ps1 proxy timeout     # vaikne kukutamine: 15 s seisakud, mitte veateade
+.\lab.ps1 lockdown proxy-only   # ADMIN: suuna Windows sinna
+```
+
+Logi `.lab\proxy.log` näeb välja nii ja **see ongi see nimekiri**, mille saad turvameeskonnale anda:
+
+```text
+2026-09-20 00:41:02  127.0.0.1:52344  GET http://c.sk.ee/esteid2018.der.crt
+  -> 200  1562 bytes  84 ms
+2026-09-20 00:41:02  127.0.0.1:52346  POST http://aia.sk.ee/esteid2018 body=87B
+  -> 200  1795 bytes  120 ms
+```
+
+Kaks asja, mida siit õpid ja mida ükski checklist ei ütle:
+
+- **Küsija ei ole sinu rakendus.** Päringud tulevad süsteemi poolelt (WinHTTP), sellepärast ei aita `Web.config` `<defaultProxy>` ega brauseri sätted. Vt [WCF Web.config proxy vs WinHTTP](#wcf-webconfig-proxy-vs-winhttp).
+- **Küsitakse ka seda, mida sa ei oodanud.** Teise generatsiooni CA, CRL suurus, ajatempliteenus. Kui allowlist katab ainult „need kaks URL-i, mis juhendis olid", tuleb viga tagasi esimese uue kaardiga.
+
+### 3. Windows Server VM: kõige tõetruum variant
+
+Kodumasin jääb kolmes kohas päris serverist puudu ja neid ei anna skriptiga võltsida: **IIS Express ≠ IIS** (app poolid, FREB, `0.0.0.0` seosed), **suletud võrk** (siin on internet alati käeulatuses) ja **teine masin** (passthrough, kaks backendi, LB).
+
+#### Hüperviisor Windows 11 Home peal
+
+Hyper-V ei kuulu Home-i koosseisu — `systeminfo` rida „A hypervisor has been detected" tähendab tavaliselt ainult seda, et VBS/WSL2 hüperviisor juba töötab, mitte et Hyper-V halduskiht oleks olemas. Kolm teed:
+
+| Variant | Plussid | Miinused |
+|---|---|---|
+| **VirtualBox** (tasuta) | töötab Home peal ametlikult, `Host-only Adapter` = valmis suletud võrk | Hyper-V/VBS taustal aeglustab |
+| **VMware Workstation Pro** (isiklikuks tasuta) | kiire, `Host-only` ja LAN-segmendid | eraldi paigaldus, suurem |
+| **Hyper-V Home-i peale käsitsi** (paketid + `Enable-WindowsOptionalFeature`) | `Internal Switch`, checkpoint'id, PowerShell automatiseerimine | **toetamata**: Windows Update võib maha võtta, litsentsiliselt hall ala |
+
+Selle labi jaoks ei ole Hyper-V vajalik: host-only adapter annab sama tulemuse — VM-il pole marsruuti internetti, host on ainus vestluskaaslane. Kui valid ikkagi Hyper-V, on see repos automatiseeritud (vt allpool).
+
+#### Hyper-V Home-i peal: lubamine ja VM ühe käsuga
+
+```powershell
+.\lab.ps1 hyperv                      # eelvaade: mis pakette lisataks, mis feature'd lubataks
+scripts\Enable-HyperVHome.ps1         # ADMIN: lisab paketid + lubab feature'd, siis REBOOT
+Get-Command New-VM ; Get-VMSwitch     # ainus aus kontroll, et halduskiht on päriselt olemas
+
+.\lab.ps1 vm                          # eelvaade VM-i seadetest
+.\lab.ps1 vm D:\iso\WindowsServer.iso # ADMIN: switch + VM + ISO + guest services
+```
+
+Kolm asja, mida siin teada:
+
+- **„A hypervisor has been detected" ei tähenda, et Hyper-V on olemas.** See rida tekib ka VBS/Device Guardi või WSL2 tõttu. Ainus kontroll on `Get-Command New-VM`.
+- **Toetamata seadistus.** Windows Update võib Home peal Hyper-V uuesti maha võtta — siis käivita `Enable-HyperVHome.ps1` uuesti. Pärast lubamist jookseb ka Windows ise hüperviisori peal, mistõttu VirtualBox ja mõned emulaatorid muutuvad aeglasemaks.
+- **Internal switchil ei ole DHCP-d.** See on tahtlik: aadressid pannakse käsitsi ja default gateway jäetakse **teadlikult** andmata, nii et ainus tee välja on hosti proxy.
+
+`New-LabVm.ps1` teeb Internal switchi `IIS-ID-Closed`, annab hostile aadressi `192.168.56.1`, loob Gen2 VM-i (2 vCPU, kuni 4 GB, 60 GB dünaamiline ketas), ühendab ISO ja lülitab sisse **Guest Service Interface**. Viimane on suletud võrgu jaoks oluline: repo saab VM-i sisse tõsta üldse ilma võrguta.
+
+```powershell
+.\lab.ps1 build
+Copy-VMFile -Name IIS-ID-Server -SourcePath C:\Users\<sina>\Desktop\IIS-ID `
+    -DestinationPath C:\IIS-ID -FileSource Host -CreateFullPath -Recurse
+```
+
+VM-is kaks teed (vali **üks**):
+
+```powershell
+# A) ilma Ansible'ta — kõik kohapeal:
+powershell -ExecutionPolicy Bypass -File C:\IIS-ID\scripts\Install-LabServer.ps1 `
+    -StaticIp 192.168.56.10 -ProxyServer 192.168.56.1:3128
+
+# B) WinRM uks lahti, IIS tuleb hosti Ansible'st (sama roll mis Nutanixis):
+powershell -ExecutionPolicy Bypass -File C:\IIS-ID\scripts\Enable-LabWinRm.ps1 -StaticIp 192.168.56.10
+# hostis:  $env:LAB_WINRM_PASSWORD = '...'; .\lab.ps1 iac; .\lab.ps1 ansible
+```
+
+Ja hostis proxy, mis kuulab ka VM-i poole:
+
+```powershell
+scripts\Start-LabProxy.ps1 allow -Bind any
+New-NetFirewallRule -DisplayName "IIS-ID lab proxy" -Direction Inbound -Action Allow `
+    -Protocol TCP -LocalPort 3128 -RemoteAddress 192.168.56.0/24
+```
+
+Enne iga lockdown-stsenaariumi tee checkpoint (`Checkpoint-VM -Name IIS-ID-Server -SnapshotName "clean lab"`) — siis on iga katse üks `Restore-VMCheckpoint` kaugusel ja sa ei pea skriptide `restore`-le lootma.
+
+#### „No operating system was loaded"
+
+Generation 2 VM-i esimene käivitus ebaõnnestub tavaliselt **klahvivajutuse pärast**, mitte seadistuse pärast: „Press any key to boot from CD/DVD" on ekraanil ~2 sekundit, teist võimalust ei anta ja UEFI kukub tühjale kettale, öeldes täpselt selle lause. Ära võistle sellega käsitsi:
+
+```powershell
+.\lab.ps1 vm-start
+```
+
+See käivitab VM-i ja vajutab TÜHIKUT Hyper-V **virtuaalsele klaviatuurile** (`Msvm_Keyboard` WMI kaudu) 12 sekundi jooksul, nii et viip tabatakse sõltumata sellest, kas konsooliaken on fookuses. Käsitsi variant on: ava `vmconnect` **enne**, klõpsa aknasse, siis `Start-VM`, siis vajuta kohe korduvalt tühikut.
+
+Kui see ei aita, lase faktid välja öelda — `vm-check` vaatab VM-i seaded **ja** monteerib ISO hostis, et kontrollida, kas seal üldse on x64 UEFI buutfailid:
+
+```powershell
+.\lab.ps1 vm-check                       # VM: generatsioon, DVD, boot order, Secure Boot, ketas
+                                         # ISO: \efi\boot\*.efi, \sources\install.*, setup.exe
+```
+
+Verdikt ütleb otse, kumb kolmest põhjusest see on, ja vastavalt sellele:
+
+```powershell
+.\lab.ps1 vm-fix C:\tee\WindowsServer.iso          # DVD esimeseks + ISO uuesti külge
+scripts\New-LabVm.ps1 -FixBoot -NoSecureBoot       # ISO ei ole MS templaadiga allkirjastatud
+scripts\New-LabVm.ps1 -IsoPath ... -Generation 1 -Name IIS-ID-Server-Gen1
+                                                   # ISO-l pole UEFI buutfaile -> BIOS-VM
+```
+
+Kui `vm-check` ütleb „ARM64 image" või „no \efi\boot\*.efi", ei ole VM-is midagi parandada: ISO on vale arhitektuuriga või pooleli laetud. Ametlik x64 evaluation ISO on ~5–7 GB ja seal on nii `\efi\boot\bootx64.efi` kui `\sources\install.wim`.
+
+Failinimes olev tühik (`WindowsServer .iso`) annab sama tulemuse juba varem — siis ütleb `New-LabVm.ps1`, millist teed ta otsis, ja loetleb samas kaustas olevad ISO-d.
+
+#### Skeem
+
+```
+HOST (Windows 11, kaardilugeja, Cursor, internet)
+  |   .\lab.ps1 proxy  -Bind any        (127.0.0.1 -> 0.0.0.0:3128)
+  |   klient: https://demo.local:8443/Demo.svc
+  |
+  |  host-only / internal switch, nt 192.168.56.0/24   <- MITTE NAT
+  v
+VM (Windows Server, ei mingit internetti)
+     IIS + Demo.Service, app poolid Backend1/Backend2
+     netsh winhttp set proxy proxy-server="192.168.56.1:3128" bypass-list="<local>"
+```
+
+Kaart jääb **hosti** külge (kliendi masin), VM-is on ainult IIS. Nii ei pea USB-läbisuunamisega jändama ja skeem vastab tööle: klient ühes masinas, IIS teises.
+
+#### Sammud
+
+1. **VM**: Windows Server 2022/2025 Evaluation ISO (180 päeva), 2 vCPU, 4 GB RAM, 40 GB ketas, **üks** host-only adapter. Tee kohe checkpoint „clean".
+2. **Hostis** `.\lab.ps1 build` ja kopeeri kogu kaust VM-i (nt `C:\IIS-ID`) — `bin\` peab kaasa tulema, sest VM-is pole SDK-d ega internetti.
+3. **Kopeeri ka `certs\eid-ca`** (ID-kaardi ahel) hostist: VM-is ei saa seda alla laadida. Siis `scripts\Install-EeIdTrust.ps1` paigaldab olemasolevatest failidest.
+4. **VM-is** (ADMIN): kas `Install-LabServer.ps1` (kõik kohapeal) **või** `Enable-LabWinRm.ps1` ja hostis `.\lab.ps1 ansible` — vt [Terraform ja Ansible](#terraform-ja-ansible). `Install-LabServer.ps1` paneb peale IIS + ASP.NET 4.8 + WCF aktiveerimise, teeb kaks app pooli (ilma idle-timeout'i ja recycle'ita), kaks saiti (`:8443`/`:8444` + health `:8080`/`:8081`), `sslFlags` ainult `Demo.svc` peale, W3C väljad koos `sc-substatus` ja `sc-win32-status`-ga ning avab sissetuleva tulemüüri. Lisa `-Tracing`, kui tahad 403 peale Failed Request Tracingut (seda IIS Express ei oska). Eelvaade: `-Preview`.
+5. **Hostis** `hosts` fail: `<VM IP>  demo.local`, siis `.\lab.ps1 client` ja aadress `https://demo.local:8443/Demo.svc`.
+6. **Hostis** `.\lab.ps1 proxy` (vajadusel `-Bind any` + sissetulev reegel pordile 3128), **VM-is** `netsh winhttp set proxy proxy-server="<host IP>:3128" bypass-list="<local>"`.
+7. Iga stsenaariumi järel `scripts\Get-EidReport.ps1 -Minutes 15` VM-is ja checkpoint tagasi.
+
+#### Mida selles VM-is katsetada (järjekorras)
+
+| Samm | Käsk VM-is | Oodatav õppetund |
+|---|---|---|
+| Baasjoon | klient → `Demo.svc` töötab | ahel ja passthrough on korras, edasi läheb ainult halvemaks |
+| Mida üldse küsitakse | hostis `proxy` logi | tellimisnimekiri, mitte oletus |
+| Osaline luba | hostis `proxy allowlist` | üks puuduv URL = 403.13 või seisakud |
+| Proxy nõuab parooli | hostis `proxy auth407` | masinakonto ei autendi; „eile töötas" |
+| Tühistus sisse | `Install-LabServer.ps1 -Revocation` | siit algab 403.13 rada, mida labis vaikimisi pole |
+| Ahel katki | `Set-LabLockdown.ps1 no-aia` | suletud võrgus pole vahelüli kuskilt võtta |
+| Usaldus katki | `Set-LabLockdown.ps1 no-issuer` | 403.16, kuigi rakendus ütleb „kehtiv" |
+| Ainult süsteem ilma võrguta | `Set-LabLockdown.ps1 system-no-net` | sinu käsitsi testid annavad vale PASS |
+| App pool | `Restart-WebAppPool Backend1Pool` | kliendi keep-alive ja retry — IIS Expressis ei näe |
+| Kaks backendi | teine VM + `haproxy-production.cfg` | passthrough kahe masina vahel, health õigest app poolist |
 
 ---
 
@@ -1257,7 +1842,7 @@ Töö poolelt (loetav koopia, mitte tootmisligipääs):
 | HAProxy | `haproxy.cfg` **mõlemast kihist** (väline + sisemine) |
 | Ansible | IIS roll, `group_vars`, sertide ja `netsh` ülesanded |
 | Terraform | NSG / security group reeglid, LB, DNS |
-| Ühe IIS-i hetkeseis | `netsh http show sslcert`, `netsh winhttp show proxy`, `certutil -store Root/CA/ClientAuthIssuer` |
+| Ühe IIS-i hetkeseis | `netsh http show sslcert` (sh **Disable Authority Info Access**), `netsh winhttp show proxy`, `certutil -store Root/CA/ClientAuthIssuer`, Schannel võtmed `ClientAuthTrustMode` / `SendTrustedIssuerList` |
 | Vea tõendid | IIS W3C read `sc-status`/`sc-substatus`, CAPI2 sündmused, HAProxy `show stat` |
 
 **Ära** pane prompti privaatvõtmeid, `.pfx` faile ega päris isikukoode. Sertifikaadi räsid ja isikukoodid maskeeri — võrdluseks piisab teadmisest, *kas* väärtus on olemas ja *millisest* hoidlast.
@@ -1351,6 +1936,7 @@ Need vead tulevad ette ka heade mudelite puhul, sest üldine veebiteadmine viib 
 | “Kaasaegne seadistus = ainult TLS 1.3” | .NET Framework 4.8 klient jääb ukse taha |
 | “Pane juurika ClientAuthIssuer’isse” | IIS 8+ ootab sealt **kesktaseme** väljastajaid |
 | “Health eraldi saidiks, nii on puhtam” | Eraldi app pool → health valetab WCF-i seisu kohta |
+| “Rakenduse logis on sert kehtiv, järelikult server on korras” | Rakenduse `X509Chain` ja HTTP.sys otsustavad eri hoidlate ja eri lippude põhjal. 403.16 kõrval võib rakenduse kontroll rahulikult „kehtiv” öelda |
 
 ---
 

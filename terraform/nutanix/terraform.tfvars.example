@@ -1,0 +1,14 @@
+# copy to terraform.tfvars in the WORK repo. Never commit real endpoints or passwords.
+
+prism_endpoint     = "prism.example.local"
+prism_username     = "terraform"
+prism_password     = "set-in-environment-or-vault"
+cluster_name       = "prod-cluster"
+subnet_name        = "app-vlan"
+name_prefix        = "iis-id"
+windows_image_uuid = "00000000-0000-0000-0000-000000000000"
+linux_image_uuid   = "00000000-0000-0000-0000-000000000000"
+iis_count          = 2
+eid_https_port     = 443
+eid_health_port    = 8080
+# ocsp_proxy_cidr  = "10.0.0.0/24"

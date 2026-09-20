@@ -13,7 +13,21 @@ namespace Demo.Client
 {
     internal sealed class MainForm : Form
     {
-        private const string DefaultAddress = "https://demo.local:9443/Demo.svc";
+        private static string DefaultAddress()
+        {
+            try
+            {
+                if (System.Deployment.Application.ApplicationDeployment.IsNetworkDeployed)
+                    return "https://demo.local:9443/Demo.svc";
+            }
+            catch
+            {
+            }
+            var cfg = System.Configuration.ConfigurationManager.AppSettings["ServiceAddress"];
+            if (!string.IsNullOrWhiteSpace(cfg))
+                return cfg;
+            return "https://demo.local:9443/Demo.svc";
+        }
 
         private readonly Label _step = new Label();
         private readonly Label _status = new Label();
@@ -146,7 +160,7 @@ namespace Demo.Client
                 AutoSize = true,
                 ForeColor = Color.DimGray
             });
-            _address.Text = DefaultAddress;
+            _address.Text = DefaultAddress();
             _address.Width = 620;
             flow.Controls.Add(_address);
 

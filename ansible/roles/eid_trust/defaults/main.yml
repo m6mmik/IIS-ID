@@ -1,0 +1,23 @@
+eid_download_certs: false
+eid_ca_remote_dir: C:\IIS-ID\certs\eid-ca
+eid_ca_local_dir: "{{ playbook_dir }}/../certs/eid-ca"
+eid_sslctl_store: ""
+eid_client_auth_trust_mode: 2
+eid_send_trusted_issuer_list: 0
+eid_enable_capi2: true
+
+# Production mapping (open-eid IIS guide / Install-EsteidIisProduction.ps1):
+# roots in Root only; intermediates in CA + ClientAuthIssuer.
+eid_certs:
+  - name: EE-GovCA2018.crt
+    url: https://c.sk.ee/EE-GovCA2018.der.crt
+    stores: [Root]
+  - name: EEGovCA2025.crt
+    url: https://crt.eidpki.ee/EEGovCA2025.crt
+    stores: [Root]
+  - name: ESTEID2018.crt
+    url: https://c.sk.ee/esteid2018.der.crt
+    stores: [CA, ClientAuthIssuer]
+  - name: ESTEID2025.crt
+    url: https://crt.eidpki.ee/ESTEID2025.crt
+    stores: [CA, ClientAuthIssuer]

@@ -1,0 +1,10 @@
+- hosts: iis
+  gather_facts: false
+  vars:
+    iis_install_path: C:\IIS-ID\publish\clickonce
+    iis_install_local: "{{ playbook_dir }}/../publish/clickonce"
+  tasks:
+    - name: Replace ClickOnce files on the guest
+      ansible.windows.win_copy:
+        src: "{{ iis_install_local }}/"
+        dest: "{{ iis_install_path }}/"

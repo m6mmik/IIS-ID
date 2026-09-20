@@ -1,0 +1,6 @@
+---
+- name: IIS + ESTEID + WinHTTP on every backend
+  import_playbook: iis.yml
+
+- name: HAProxy TCP passthrough (skipped when the haproxy group is empty)
+  import_playbook: haproxy.yml

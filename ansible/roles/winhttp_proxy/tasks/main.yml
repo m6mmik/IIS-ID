@@ -1,0 +1,27 @@
+---
+# HTTP.sys / Schannel / lsass use WinHTTP, not IE and not Web.config <defaultProxy>.
+# A proxy only in WCF config still yields 403.13 on a closed network.
+
+- name: Show current WinHTTP proxy (lsass path)
+  ansible.windows.win_command: netsh winhttp show proxy
+  register: winhttp_before
+  changed_when: false
+
+- name: Set WinHTTP proxy
+  ansible.windows.win_command: >
+    netsh winhttp set proxy
+    proxy-server="{{ eid_winhttp_proxy }}"
+    bypass-list="{{ eid_winhttp_bypass }}"
+  when: eid_winhttp_proxy | length > 0
+  register: winhttp_set
+  changed_when: winhttp_set.rc == 0
+
+- name: Clear WinHTTP when no proxy is configured
+  ansible.windows.win_command: netsh winhttp reset proxy
+  when: eid_winhttp_proxy | length == 0
+  register: winhttp_reset
+  changed_when: winhttp_reset.rc == 0
+
+- name: WinHTTP after change
+  ansible.windows.win_command: netsh winhttp show proxy
+  changed_when: false

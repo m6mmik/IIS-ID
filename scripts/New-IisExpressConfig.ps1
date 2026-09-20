@@ -2,6 +2,8 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $SitePath = Join-Path $Root "src\Demo.Service"
+$InstallPath = Join-Path $Root "publish\clickonce"
+New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
 $IisDir = Join-Path $Root "iis"
 $Dest = Join-Path $IisDir "applicationhost.config"
 $Source = Join-Path $env:USERPROFILE "Documents\IISExpress\config\applicationhost.config"
@@ -54,6 +56,10 @@ function Add-Site($name, $id, $pool, $httpsPort, $httpPort) {
     $vdir.SetAttribute("path", "/")
     $vdir.SetAttribute("physicalPath", $SitePath)
     [void]$app.AppendChild($vdir)
+    $install = $xml.CreateElement("virtualDirectory")
+    $install.SetAttribute("path", "/install")
+    $install.SetAttribute("physicalPath", $InstallPath)
+    [void]$app.AppendChild($install)
     [void]$site.AppendChild($app)
 
     $bindings = $xml.CreateElement("bindings")
@@ -112,9 +118,11 @@ Add-Location "Backend1" "None"
 Add-Location "Backend2" "None"
 Add-Location "Backend1/Demo.svc" "Ssl,SslNegotiateCert,SslRequireCert"
 Add-Location "Backend2/Demo.svc" "Ssl,SslNegotiateCert,SslRequireCert"
+Add-Location "Backend1/install" "None"
+Add-Location "Backend2/install" "None"
 
 $xml.Save($Dest)
 Write-Host "IIS Express config: $Dest"
-Write-Host "  Backend1Pool  https://127.0.0.1:8443/Demo.svc  health :8080"
-Write-Host "  Backend2Pool  https://127.0.0.1:8444/Demo.svc  health :8081"
+Write-Host "  Backend1Pool  https://127.0.0.1:8443/Demo.svc  health :8080  install :8080/install/"
+Write-Host "  Backend2Pool  https://127.0.0.1:8444/Demo.svc  health :8081  install :8081/install/"
 Write-Host "  W3C logid (sc-substatus): $LogDir"

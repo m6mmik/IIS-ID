@@ -1,0 +1,7 @@
+haproxy_bind_port: 443
+haproxy_stats_port: 8404
+haproxy_balance: roundrobin
+haproxy_health_path: /health.json
+haproxy_backends: []
+haproxy_package: haproxy
+haproxy_config: /etc/haproxy/haproxy.cfg

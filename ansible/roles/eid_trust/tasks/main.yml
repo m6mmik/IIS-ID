@@ -1,0 +1,52 @@
+---
+- name: Remote directory for EE-GovCA / ESTEID files
+  ansible.windows.win_file:
+    path: "{{ eid_ca_remote_dir }}"
+    state: directory
+
+- name: Copy ESTEID files from the controller (closed network — no SK download)
+  ansible.windows.win_copy:
+    src: "{{ eid_ca_local_dir }}/"
+    dest: "{{ eid_ca_remote_dir }}/"
+  when: not eid_download_certs
+  ignore_errors: true
+  register: eid_ca_copy
+
+- name: Download ESTEID files on the guest (needs egress or WinHTTP proxy)
+  ansible.windows.win_get_url:
+    url: "{{ item.url }}"
+    dest: "{{ eid_ca_remote_dir }}\\{{ item.name }}"
+  loop: "{{ eid_certs }}"
+  when: eid_download_certs
+
+- name: Install each CA into the stores HTTP.sys actually reads
+  ansible.windows.win_shell: |
+    $path = Join-Path '{{ eid_ca_remote_dir }}' '{{ item.name }}'
+    if (-not (Test-Path $path)) {
+      throw "Missing $path. Put the four EE-GovCA/ESTEID files in certs/eid-ca on the controller (closed VM) or set eid_download_certs=true after SK :443 is ordered."
+    }
+    foreach ($store in @('{{ item.stores | join("','") }}')) {
+      & certutil -f -addstore $store $path | Out-Null
+      Write-Output "ok $store {{ item.name }}"
+    }
+  loop: "{{ eid_certs }}"
+  changed_when: false
+
+- name: ClientAuthTrustMode (1/2 = chain must end in ClientAuthIssuer)
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL
+    name: ClientAuthTrustMode
+    type: dword
+    data: "{{ eid_client_auth_trust_mode }}"
+
+- name: SendTrustedIssuerList off (large CTL breaks the handshake)
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL
+    name: SendTrustedIssuerList
+    type: dword
+    data: "{{ eid_send_trusted_issuer_list }}"
+
+- name: CAPI2 Operational log
+  ansible.windows.win_shell: wevtutil sl Microsoft-Windows-CAPI2/Operational /e:true
+  when: eid_enable_capi2
+  changed_when: false

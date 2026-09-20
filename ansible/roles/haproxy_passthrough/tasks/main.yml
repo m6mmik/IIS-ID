@@ -1,0 +1,24 @@
+---
+- name: HAProxy package
+  ansible.builtin.package:
+    name: "{{ haproxy_package }}"
+    state: present
+  become: true
+
+- name: haproxy.cfg (TCP passthrough, health without a client cert)
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: "{{ haproxy_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: haproxy -c -f %s
+  become: true
+  notify: Reload haproxy
+
+- name: HAProxy running
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+    enabled: true
+  become: true

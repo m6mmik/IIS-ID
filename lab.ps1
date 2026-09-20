@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("help", "build", "certs", "bind", "eid-ca", "start", "start-selfhost", "start-lb", "stop", "down", "up", "client", "haproxy", "haproxy-stop", "status", "diagnose", "report", "probe", "probe-stop")]
+    [ValidateSet("help", "build", "certs", "bind", "eid-ca", "start", "start-selfhost", "start-lb", "stop", "down", "up", "client", "haproxy", "haproxy-stop", "status", "diagnose", "report", "probe", "probe-stop", "lockdown", "unlock", "proxy", "proxy-stop", "hyperv", "vm", "vm-fix", "vm-check", "vm-start", "vm-pass", "bootstrap", "iac", "ansible", "ansible-ping", "tf", "publish")]
     [string]$Command = "help",
     [Parameter(Position = 1)]
     [string]$Target
@@ -57,6 +57,107 @@ function Get-RunningPids {
         $procId = 0
         if ([int]::TryParse($map[$key], [ref]$procId)) { $procId }
     }
+}
+
+function Get-TerraformExe {
+    $cmd = Get-Command terraform -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    foreach ($candidate in @(
+            (Join-Path $Root "terraform.exe"),
+            "C:\terraform\terraform.exe",
+            (Join-Path $env:LOCALAPPDATA "terraform\terraform.exe")
+        )) {
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
+
+function Get-LabWslDistro {
+    if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { return $null }
+    $raw = & wsl.exe -l -q 2>$null
+    foreach ($n in @($raw | ForEach-Object { ($_ -replace "`0", "").Trim() } | Where-Object { $_ })) {
+        if ($n -notmatch "docker-desktop") { return $n }
+    }
+    return $null
+}
+
+function Invoke-Compose {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$ComposeArgs)
+    $args = @("compose") + @($ComposeArgs)
+    if (Get-Command podman -ErrorAction SilentlyContinue) {
+        Write-Host "compose: podman"
+        & podman @args
+        return
+    }
+    if (Get-Command docker -ErrorAction SilentlyContinue) {
+        Write-Host "compose: docker"
+        & docker @args
+        return
+    }
+    throw "Neither podman nor docker is on PATH. Install Podman Desktop (or Docker) then .\lab.ps1 haproxy"
+}
+
+function ConvertTo-WslPath([string]$winPath) {
+    $full = [System.IO.Path]::GetFullPath($winPath)
+    if ($full -notmatch '^([A-Za-z]):\\') { throw "Not a drive path: $full" }
+    $drive = $Matches[1].ToLowerInvariant()
+    $rest = $full.Substring(2) -replace '\\', '/'
+    return "/mnt/$drive$rest"
+}
+
+function Invoke-LabAnsible {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$AnsibleArgs,
+        [switch]$NeedPassword
+    )
+    if ($NeedPassword -and -not $env:LAB_WINRM_PASSWORD) {
+        $passFile = Join-Path $Root ".lab\lab-admin.pass"
+        if (Test-Path $passFile) { $env:LAB_WINRM_PASSWORD = (Get-Content $passFile -Raw).Trim() }
+        if (-not $env:LAB_WINRM_PASSWORD) {
+            throw "Set the guest Administrator password: `$env:LAB_WINRM_PASSWORD = 'IisId2026!'"
+        }
+    }
+    $ansibleDir = Join-Path $Root "ansible"
+    if (Get-Command ansible-playbook -ErrorAction SilentlyContinue) {
+        Push-Location $ansibleDir
+        try { & ansible-playbook @AnsibleArgs; return $LASTEXITCODE } finally { Pop-Location }
+    }
+    $distro = Get-LabWslDistro
+    if ($distro) {
+        $wslDir = ConvertTo-WslPath $ansibleDir
+        $quoted = ($AnsibleArgs | ForEach-Object { if ($_ -match '\s') { "'" + $_ + "'" } else { $_ } }) -join ' '
+        $env:WSLENV = "LAB_WINRM_PASSWORD/u:LAB_WINRM_USER/u"
+        $inner = "export PATH=/opt/iis-id-ansible/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export ANSIBLE_CONFIG=/tmp/iis-id-ansible.cfg; cp -f '$wslDir/ansible.cfg' /tmp/iis-id-ansible.cfg; cd '$wslDir'; ansible-playbook $quoted"
+        cmd.exe /c "wsl.exe -d $distro -u root -- bash -lc `"$inner`"" | Out-Host
+        return [int]$LASTEXITCODE
+    }
+    throw "Ansible not found. WSL has no Linux distro (docker-desktop does not count). Run .\lab.ps1 iac"
+}
+
+function Invoke-LabAnsibleAdhoc {
+    param([string[]]$ModuleArgs)
+    if (-not $env:LAB_WINRM_PASSWORD) {
+        $passFile = Join-Path $Root ".lab\lab-admin.pass"
+        if (Test-Path $passFile) { $env:LAB_WINRM_PASSWORD = (Get-Content $passFile -Raw).Trim() }
+        if (-not $env:LAB_WINRM_PASSWORD) {
+            throw "Set the guest Administrator password: `$env:LAB_WINRM_PASSWORD = 'IisId2026!'"
+        }
+    }
+    $ansibleDir = Join-Path $Root "ansible"
+    if (Get-Command ansible -ErrorAction SilentlyContinue) {
+        Push-Location $ansibleDir
+        try { & ansible @ModuleArgs; return $LASTEXITCODE } finally { Pop-Location }
+    }
+    $distro = Get-LabWslDistro
+    if ($distro) {
+        $wslDir = ConvertTo-WslPath $ansibleDir
+        $quoted = ($ModuleArgs | ForEach-Object { if ($_ -match '\s') { "'" + $_ + "'" } else { $_ } }) -join ' '
+        $env:WSLENV = "LAB_WINRM_PASSWORD/u:LAB_WINRM_USER/u"
+        $inner = "export PATH=/opt/iis-id-ansible/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export ANSIBLE_CONFIG=/tmp/iis-id-ansible.cfg; cp -f '$wslDir/ansible.cfg' /tmp/iis-id-ansible.cfg; cd '$wslDir'; ansible $quoted"
+        cmd.exe /c "wsl.exe -d $distro -u root -- bash -lc `"$inner`"" | Out-Host
+        return [int]$LASTEXITCODE
+    }
+    throw "Ansible not found. WSL has no Linux distro (docker-desktop does not count). Run .\lab.ps1 iac"
 }
 
 function Resolve-BackendName([string]$name) {
@@ -146,6 +247,26 @@ function Start-CertProbe([string]$port) {
     Write-Host "  kas serti kusiti, kas ahel ehitub, millisest hoidlast iga luli tuleb,"
     Write-Host "  kas OCSP vastab ja mida IIS teeks (403.7 / 403.13 / 403.16)."
     Write-Host "Logi: .lab\certprobe.log      Peata: .\lab.ps1 probe-stop"
+}
+
+function Start-LabProxy([string]$mode) {
+    if (-not $mode) { $mode = "allow" }
+    $script = Join-Path $Root "scripts\Start-LabProxy.ps1"
+    Stop-LabProxy
+    Start-LoggedProcess "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script, $mode, "-Bind", "any") "proxy" | Out-Null
+    Start-Sleep -Milliseconds 800
+    Write-Host ""
+    Write-Host "Lab proxy: 0.0.0.0:3128 (loopback + 192.168.56.2)  mode=$mode"
+    Write-Host "Logi: .lab\proxy.log  (iga URL, mida Windows ise kusib: AIA / CRL / OCSP)"
+    Write-Host "VM WinHTTP: http://192.168.56.2:3128   Host: .\lab.ps1 lockdown proxy-only   (ADMIN)"
+    Write-Host "Peata: .\lab.ps1 proxy-stop"
+}
+
+function Stop-LabProxy {
+    Stop-NamedProcess "proxy"
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq "powershell.exe" -and $_.CommandLine -like "*Start-LabProxy.ps1*" } |
+        ForEach-Object { Stop-ProcessId ([int]$_.ProcessId) "proxy" }
 }
 
 function Add-Pid([int]$procId, [string]$name) {
@@ -276,11 +397,32 @@ IIS-ID kodune lab (.NET 4.8, IIS Express app poolid, PIN1/PIN2, TCP load balanci
   .\lab.ps1 report 15        Sama raport viimase 15 min kohta ja avab selle
   .\lab.ps1 probe            CertProbe: ava kaardiga https://demo.local:9444/ ja naed miks ahel ei ehitu
   .\lab.ps1 probe-stop       Peata CertProbe
+  .\lab.ps1 proxy [mode]     Logiv lab-proxy: naitab, MIS URL-e Windows ise kusib
+                             mode: allow (vaikimisi) | allowlist | auth407 | deny | timeout
+  .\lab.ps1 proxy-stop       Peata lab-proxy
+  .\lab.ps1 lockdown [nimi]  ADMIN: tee masinast suletud vorgu server (vaikimisi: status)
+                             hosts-blackhole | system-no-net | proxy-only | dead-proxy
+                             no-aia | no-issuer
+  .\lab.ps1 unlock           ADMIN: votab koik lockdown-muudatused tagasi
+                             Eelvaade ilma muutmata:
+                             scripts\Set-LabLockdown.ps1 proxy-only -Preview
+  .\lab.ps1 hyperv           Windows Home: eelvaade Hyper-V lubamisest
+  .\lab.ps1 vm [iso]         Loo suletud vorgu Windows Server VM (ilma ISO-ta = eelvaade)
+  .\lab.ps1 vm-start         Kaivita VM ja vajuta ise SPACE (CD/DVD viip on ~2 s)
+  .\lab.ps1 vm-pass          Setupi Administrator parool (IisId2026!) WMI klaviatuuriga
+  .\lab.ps1 bootstrap        Ootab guest valmis (PS Direct) + WinRM + Ansible — ilma konsoolita
+  .\lab.ps1 vm-check [iso]   Miks VM ei buudi: VM seaded + kas ISO on x64 UEFI Windows
+  .\lab.ps1 vm-fix [iso]     "No operating system was loaded": DVD esimeseks + juhend
+  .\lab.ps1 iac              Ansible kontrollsõlm (WSL: ansible-core + Windows collectionid)
+  .\lab.ps1 ansible-ping     WinRM test 192.168.56.10 vastu (LAB_WINRM_PASSWORD)
+  .\lab.ps1 ansible          IIS + ESTEID + WinHTTP guestis (sama roll mis Nutanixis)
+  .\lab.ps1 publish          ClickOnce paigalduskaust (siis ansible kopeerib /install peale)
+  .\lab.ps1 tf [plan|apply]  Terraform Hyper-V juur (switch + VM; destroy ei kustuta Windowsit)
   .\lab.ps1 client           Ava desktop klient (PIN1, siis PIN2)
   .\lab.ps1 down Backend1    Tapab ühe IIS-i (failover test)
   .\lab.ps1 up Backend1      Toob sama backend'i tagasi
   .\lab.ps1 stop             Peata lab
-  .\lab.ps1 haproxy          Docker HAProxy TCP passthrough (peata enne .NET LB)
+  .\lab.ps1 haproxy          HAProxy TCP passthrough (Podman, muidu Docker; peata enne .NET LB)
   .\lab.ps1 haproxy-stop
   .\lab.ps1 status
 
@@ -292,10 +434,17 @@ PIN1 sisestatud, aga ikka ei toimi? Jarjekord:
   2) .\lab.ps1 report 15    -> uks fail: IIS alamstaatus, CAPI2, Schannel, hoidlad, OCSP
   3) kliendis nupp "Diagnostika" -> paris HTTP staatus, mitte "Anonymous"
 
+Kodus internet, tool keelatud? Tekita sama olukord siin:
+  .\lab.ps1 proxy                    -> naed logist, MIS URL-e Windows kusib
+  .\lab.ps1 lockdown proxy-only      -> otse suletud, ainult proxy (ADMIN)
+  .\lab.ps1 lockdown system-no-net   -> ainult lsass/IIS kaotavad vorgu; PS testid ikka PASS
+  .\lab.ps1 lockdown no-issuer       -> 403.16, kuigi rakendus utleb "sert kehtiv"
+  .\lab.ps1 unlock                   -> koik tagasi
+
 Klient: https://demo.local:9443/Demo.svc
 Stats:  http://127.0.0.1:8404/
-Logid:  .lab\certprobe.log, .lab\eid-report-*.txt, %LOCALAPPDATA%\IIS-ID\client.log,
-        src\Demo.Service\App_Data\service.log
+Logid:  .lab\certprobe.log, .lab\proxy.log, .lab\eid-report-*.txt,
+        %LOCALAPPDATA%\IIS-ID\client.log, src\Demo.Service\App_Data\service.log
 "@
     }
     "build" { Invoke-Build }
@@ -305,6 +454,7 @@ Logid:  .lab\certprobe.log, .lab\eid-report-*.txt, %LOCALAPPDATA%\IIS-ID\client.
     "start" {
         Stop-Lab
         Invoke-Build
+        & (Join-Path $Root "scripts\Publish-ClickOnce.ps1")
         & (Join-Path $Root "scripts\New-IisExpressConfig.ps1")
         if (-not (Test-Path $IisExpress)) { throw "IIS Express puudub: $IisExpress" }
         Start-LoadBalancer
@@ -316,6 +466,7 @@ Logid:  .lab\certprobe.log, .lab\eid-report-*.txt, %LOCALAPPDATA%\IIS-ID\client.
         Wait-Health 8081
         Write-Host ""
         Write-Host "Lab over. Klient: .\lab.ps1 client"
+        Write-Host "Paigalda: http://demo.local:8080/install/  (ilma PIN1-ta)"
         Write-Host "Stats: http://127.0.0.1:8404/"
         Write-Host "Otse Backend1: https://127.0.0.1:8443/Demo.svc"
         Write-Host "Failover: .\lab.ps1 down Backend1   /   .\lab.ps1 up Backend1"
@@ -370,13 +521,13 @@ Logid:  .lab\certprobe.log, .lab\eid-report-*.txt, %LOCALAPPDATA%\IIS-ID\client.
         Wait-Health 8080
         Wait-Health 8081
         Push-Location $Root
-        try { docker compose up -d }
+        try { Invoke-Compose up -d }
         finally { Pop-Location }
         Write-Host "HAProxy kuulab hostiporti 9443. Stats http://127.0.0.1:8404/"
     }
     "haproxy-stop" {
         Push-Location $Root
-        try { docker compose down }
+        try { Invoke-Compose down }
         finally { Pop-Location }
         Stop-Lab
     }
@@ -397,6 +548,80 @@ Logid:  .lab\certprobe.log, .lab\eid-report-*.txt, %LOCALAPPDATA%\IIS-ID\client.
         & (Join-Path $Root "scripts\Get-EidReport.ps1") -Minutes $minutes -Open
     }
     "probe" { Start-CertProbe $Target }
+    "lockdown" {
+        # Teeb sellest masinast "suletud vorgu" serveri: vaikimisi keelatud valjapoole.
+        $scenario = $Target
+        if (-not $scenario) { $scenario = "status" }
+        & (Join-Path $Root "scripts\Set-LabLockdown.ps1") $scenario
+    }
+    "unlock" { & (Join-Path $Root "scripts\Set-LabLockdown.ps1") restore }
+    "hyperv" {
+        # Windows Home: Hyper-V ei ole vaikimisi olemas. Eelvaade enne muutmist.
+        & (Join-Path $Root "scripts\Enable-HyperVHome.ps1") -Preview
+        Write-Host ""
+        Write-Host "Paigaldamiseks (ADMIN): scripts\Enable-HyperVHome.ps1"
+    }
+    "vm" {
+        if (-not $Target) {
+            & (Join-Path $Root "scripts\New-LabVm.ps1") -Preview
+            Write-Host ""
+            Write-Host "Anna ISO kaasa: .\lab.ps1 vm D:\iso\WindowsServer.iso"
+            return
+        }
+        & (Join-Path $Root "scripts\New-LabVm.ps1") -IsoPath $Target
+    }
+    "bootstrap" {
+        & (Join-Path $Root "scripts\Bootstrap-LabGuest.ps1")
+    }
+    "vm-pass" {
+        & (Join-Path $Root "scripts\Send-LabVmText.ps1")
+    }
+    "vm-start" {
+        # Kaivitab VM-i ja vajutab ise SPACE-i, et "Press any key to boot from CD/DVD"
+        # aken (~2 s) kindlasti tabatud saaks.
+        & (Join-Path $Root "scripts\New-LabVm.ps1") -StartWithKey
+    }
+    "vm-check" {
+        # Miks VM utleb "No operating system was loaded": VM seaded + ISO sisu.
+        if ($Target) { & (Join-Path $Root "scripts\Test-LabVm.ps1") -IsoPath $Target }
+        else { & (Join-Path $Root "scripts\Test-LabVm.ps1") }
+    }
+    "iac" { & (Join-Path $Root "scripts\Install-LabIac.ps1") }
+    "ansible-ping" {
+        $code = Invoke-LabAnsibleAdhoc @("-i", "inventories/lab.yml", "iis", "-m", "ansible.windows.win_ping")
+        if ($code -ne 0) { throw "ansible-ping failed (exit $code). Guest: scripts\Enable-LabWinRm.ps1" }
+    }
+    "publish" { & (Join-Path $Root "scripts\Publish-ClickOnce.ps1") }
+    "ansible" {
+        Invoke-Build
+        & (Join-Path $Root "scripts\Publish-ClickOnce.ps1")
+        $code = Invoke-LabAnsible -NeedPassword -AnsibleArgs @("-i", "inventories/lab.yml", "iis.yml")
+        if ($code -ne 0) { throw "ansible-playbook failed (exit $code)." }
+    }
+    "tf" {
+        $tf = Get-TerraformExe
+        if (-not $tf) {
+            throw "terraform.exe not found. Expected C:\terraform\terraform.exe or PATH. Then .\lab.ps1 tf init"
+        }
+        $action = if ($Target) { $Target } else { "plan" }
+        if ($action -notin @("init", "plan", "apply", "output", "validate", "show")) {
+            throw "Kasuta: .\lab.ps1 tf  voi  .\lab.ps1 tf init|plan|apply|output"
+        }
+        $tfDir = Join-Path $Root "terraform\hyperv"
+        Write-Host "terraform: $tf"
+        if ($action -eq "apply") { & $tf -chdir="$tfDir" apply }
+        else { & $tf -chdir="$tfDir" $action }
+    }
+    "vm-fix" {
+        # "No operating system was loaded": DVD boot order / ISO / kaotatud klahvivajutus.
+        if ($Target) { & (Join-Path $Root "scripts\New-LabVm.ps1") -FixBoot -IsoPath $Target }
+        else { & (Join-Path $Root "scripts\New-LabVm.ps1") -FixBoot }
+    }
+    "proxy" { Start-LabProxy $Target }
+    "proxy-stop" {
+        Stop-LabProxy
+        Write-Host "Lab proxy peatatud."
+    }
     "probe-stop" {
         Stop-NamedProcess "probe"
         Get-Process Demo.CertProbe -ErrorAction SilentlyContinue | ForEach-Object { Stop-ProcessId $_.Id "probe" }

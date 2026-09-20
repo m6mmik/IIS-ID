@@ -1,0 +1,35 @@
+# Home Hyper-V guest on the internal switch. Password from the environment,
+# never from git:  $env:LAB_WINRM_PASSWORD = '...'
+#
+# Guest bootstrap (once, inside the VM):
+#   powershell -File C:\IIS-ID\scripts\Enable-LabWinRm.ps1 -StaticIp 192.168.56.10
+
+all:
+  children:
+    iis:
+      hosts:
+        IIS-ID-Server:
+          # Host vars beat playbook group_vars/all.yml (work-safe empty proxy).
+          eid_https_port: 8443
+          eid_health_port: 8080
+          eid_winhttp_proxy: "http://192.168.56.2:3128"
+          eid_winhttp_bypass: "<local>"
+          eid_wcf_default_proxy: "{{ eid_winhttp_proxy }}"
+          eid_revocation: false
+          eid_revocation_mode_app: NoCheck
+          eid_allow_lab_certificates: true
+          eid_download_certs: false
+          ansible_host: 192.168.56.10
+          ansible_connection: winrm
+          ansible_user: "{{ lookup('env', 'LAB_WINRM_USER') | default('Administrator', true) }}"
+          ansible_password: "{{ lookup('env', 'LAB_WINRM_PASSWORD') | default(lookup('file', playbook_dir + '/../.lab/lab-admin.pass', errors='ignore'), true) }}"
+          ansible_port: 5985
+          ansible_winrm_transport: ntlm
+          ansible_winrm_scheme: http
+          ansible_winrm_server_cert_validation: ignore
+          ansible_winrm_read_timeout_sec: 120
+          ansible_winrm_operation_timeout_sec: 60
+    haproxy:
+      hosts: {}
+      # Lab HAProxy is Docker on the Windows host (.\lab.ps1 haproxy), not a
+      # guest. A Linux VM would go here the same way work inventory does.

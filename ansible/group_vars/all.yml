@@ -1,0 +1,18 @@
+# Work-safe defaults. Lab inventory overrides proxy + AllowLabCertificates.
+# Closed work VMs have no egress until someone orders it — do not inherit
+# the home-lab proxy, and do not require SK downloads at apply time.
+
+eid_winhttp_proxy: ""
+eid_winhttp_bypass: "<local>"
+eid_wcf_default_proxy: ""
+
+eid_https_port: 443
+eid_health_port: 8080
+eid_revocation: false
+eid_revocation_mode_app: NoCheck
+eid_download_certs: false
+eid_client_auth_trust_mode: 2
+eid_send_trusted_issuer_list: 0
+eid_enable_capi2: true
+eid_allow_lab_certificates: false
+eid_sslctl_store: ""

@@ -1,0 +1,6 @@
+---
+- name: HAProxy SSL passthrough
+  hosts: haproxy
+  gather_facts: true
+  roles:
+    - haproxy_passthrough

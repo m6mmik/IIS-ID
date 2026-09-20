@@ -1,0 +1,67 @@
+# Experiment 1: 403.16 / 2148204809 by untrusting the EE-GovCA root.
+# No CTL. ESTEID stays in CA (+ ClientAuthIssuer). Card-sent intermediate
+# cannot finish at a trusted root.
+- hosts: iis
+  gather_facts: false
+  tasks:
+    - name: Backup and remove EE-GovCA from LocalMachine\\Root
+      ansible.windows.win_shell: |
+        $bak = 'C:\IIS-ID\.lab\lockdown-certs'
+        New-Item -ItemType Directory -Force -Path $bak | Out-Null
+        $store = New-Object Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine')
+        $store.Open('ReadWrite')
+        foreach ($cert in @($store.Certificates)) {
+          if ($cert.Subject -notmatch 'GovCA|EE-Gov') { continue }
+          $file = Join-Path $bak ("Root-{0}.cer" -f $cert.Thumbprint)
+          if (-not (Test-Path $file)) { [IO.File]::WriteAllBytes($file, $cert.Export('Cert')) }
+          $store.Remove($cert)
+          Write-Output ("removed Root " + $cert.Subject)
+        }
+        $store.Close()
+        $left = @(Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -match 'GovCA|EE-Gov' })
+        Write-Output "Root GovCA left=$($left.Count)"
+      register: root
+    - debug:
+        var: root.stdout
+
+    - name: ESTEID back in CA and ClientAuthIssuer
+      ansible.windows.win_shell: |
+        $eid = 'C:\IIS-ID\certs\eid-ca'
+        foreach ($name in @('ESTEID2018.crt','ESTEID2025.crt')) {
+          $f = Join-Path $eid $name
+          if (Test-Path $f) {
+            & certutil -f -addstore CA $f | Out-Null
+            & certutil -f -addstore ClientAuthIssuer $f | Out-Null
+            Write-Output "ok $name"
+          }
+        }
+
+    - name: ClientAuthTrustMode=2, no CTL on the bindings
+      ansible.windows.win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL
+        name: ClientAuthTrustMode
+        type: dword
+        data: 2
+
+    - name: Rebind HTTPS without sslctlstorename
+      ansible.windows.win_shell: |
+        foreach ($port in 8443, 8444) {
+          $ipPort = "0.0.0.0:$port"
+          $show = & netsh http show sslcert ipport=$ipPort
+          $hash = ($show | Select-String 'Certificate Hash\s*:\s*(\S+)').Matches.Groups[1].Value
+          $app = ($show | Select-String 'Application ID\s*:\s*(\S+)').Matches.Groups[1].Value
+          if (-not $hash) { throw "no sslcert $ipPort" }
+          & netsh http delete sslcert ipport=$ipPort
+          & netsh http add sslcert ipport=$ipPort certhash=$hash appid=$app certstorename=MY `
+            clientcertnegotiation=enable verifyclientcertrevocation=disable disableaia=enable
+          $after = & netsh http show sslcert ipport=$ipPort
+          $ctl = ($after | Select-String 'Ctl Store Name\s*:\s*(\S+)').Matches.Groups[1].Value
+          Write-Output "$ipPort ctl=$ctl"
+        }
+      register: bind
+    - debug:
+        var: bind.stdout
+
+    - name: Recycle IIS
+      ansible.windows.win_shell: iisreset /noforce
+      failed_when: false

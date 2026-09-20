@@ -26,15 +26,17 @@ Remove-BySubject Cert:\CurrentUser\My $serverSubject
 Remove-BySubject Cert:\CurrentUser\My $authSubject
 Remove-BySubject Cert:\CurrentUser\My $signSubject
 
+# RSA for the lab CA and server cert: Firefox/NSS rejects many Windows-generated
+# ECDSA P-384 signatures (SEC_ERROR_BAD_SIGNATURE) while Schannel accepts them.
+# ID-card PIN1/PIN2 stay ECDSA so the client path still looks like eID.
 Write-Host "Creating lab CA..."
 $ca = New-SelfSignedCertificate `
     -Subject $caSubject `
     -FriendlyName "IIS-ID Home Lab Root" `
     -KeyUsage CertSign, CRLSign, DigitalSignature `
     -KeyExportPolicy Exportable `
-    -KeyLength 384 `
-    -KeyAlgorithm ECDSA_nistP384 `
-    -HashAlgorithm SHA384 `
+    -KeyLength 2048 `
+    -HashAlgorithm SHA256 `
     -CertStoreLocation Cert:\CurrentUser\My `
     -Type Custom `
     -TextExtension @("2.5.29.19={critical}{text}ca=1&pathlength=1") `
@@ -45,16 +47,15 @@ $server = New-SelfSignedCertificate `
     -Subject $serverSubject `
     -FriendlyName "IIS-ID demo.local" `
     -Signer $ca `
-    -KeyUsage DigitalSignature `
+    -KeyUsage DigitalSignature, KeyEncipherment `
     -KeyExportPolicy Exportable `
-    -KeyLength 384 `
-    -KeyAlgorithm ECDSA_nistP384 `
-    -HashAlgorithm SHA384 `
+    -KeyLength 2048 `
+    -HashAlgorithm SHA256 `
     -CertStoreLocation Cert:\CurrentUser\My `
     -Type Custom `
     -TextExtension @(
         "2.5.29.37={text}1.3.6.1.5.5.7.3.1",
-        "2.5.29.17={text}DNS=demo.local&DNS=localhost&IPAddress=127.0.0.1"
+        "2.5.29.17={text}DNS=demo.local&DNS=localhost&IPAddress=127.0.0.1&IPAddress=192.168.56.10"
     ) `
     -NotAfter (Get-Date).AddYears(3)
 
@@ -93,12 +94,29 @@ $sign = New-SelfSignedCertificate `
     ) `
     -NotAfter (Get-Date).AddYears(3)
 
+Write-Host "Creating ClickOnce code-signing certificate..."
+Remove-BySubject Cert:\CurrentUser\My "CN=IIS-ID Lab Code Signing, O=IIS-ID Home Lab, C=EE"
+$codesign = New-SelfSignedCertificate `
+    -Subject "CN=IIS-ID Lab Code Signing, O=IIS-ID Home Lab, C=EE" `
+    -FriendlyName "IIS-ID lab ClickOnce" `
+    -Signer $ca `
+    -KeyUsage DigitalSignature `
+    -KeyExportPolicy Exportable `
+    -KeyLength 2048 `
+    -HashAlgorithm SHA256 `
+    -CertStoreLocation Cert:\CurrentUser\My `
+    -Type Custom `
+    -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3") `
+    -NotAfter (Get-Date).AddYears(3)
+
 $password = ConvertTo-SecureString "lab" -AsPlainText -Force
 Export-Certificate -Cert $ca -FilePath (Join-Path $Out "lab-root.cer") | Out-Null
 Export-PfxCertificate -Cert $server -FilePath (Join-Path $Out "lab-server.pfx") -Password $password | Out-Null
 Export-Certificate -Cert $server -FilePath (Join-Path $Out "lab-server.cer") | Out-Null
 Export-PfxCertificate -Cert $auth -FilePath (Join-Path $Out "lab-auth.pfx") -Password $password | Out-Null
 Export-PfxCertificate -Cert $sign -FilePath (Join-Path $Out "lab-sign.pfx") -Password $password | Out-Null
+Export-PfxCertificate -Cert $codesign -FilePath (Join-Path $Out "lab-codesign.pfx") -Password $password | Out-Null
+Export-Certificate -Cert $codesign -FilePath (Join-Path $Out "lab-codesign.cer") | Out-Null
 Set-Content -Path (Join-Path $Out "server.thumbprint") -Value $server.Thumbprint -Encoding ASCII
 try {
     Import-Certificate -FilePath (Join-Path $Out "lab-root.cer") -CertStoreLocation Cert:\CurrentUser\Root | Out-Null

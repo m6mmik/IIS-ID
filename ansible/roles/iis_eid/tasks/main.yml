@@ -1,0 +1,248 @@
+---
+- name: IIS + ASP.NET 4.8 + WCF HTTP activation
+  ansible.windows.win_feature:
+    name: "{{ iis_features }}"
+    state: present
+    include_management_tools: true
+
+- name: Remote cert and site directories
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ iis_remote_cert_dir }}"
+    - "{{ iis_site_path }}"
+    - "{{ iis_site_path }}\\App_Data"
+
+- name: Copy Demo.Service from the controller
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/../src/Demo.Service/"
+    dest: "{{ iis_site_path }}/"
+  when: iis_copy_app
+
+- name: Copy lab CA and server PFX (created on the host by lab.ps1 certs)
+  ansible.windows.win_copy:
+    src: "{{ item }}"
+    dest: "{{ iis_remote_cert_dir }}\\"
+  loop:
+    - "{{ iis_lab_ca }}"
+    - "{{ iis_lab_pfx }}"
+    - "{{ iis_lab_thumbprint_file }}"
+  ignore_errors: true
+
+- name: Trust lab CA in Root, CA, ClientAuthIssuer
+  ansible.windows.win_shell: |
+    $cer = Join-Path '{{ iis_remote_cert_dir }}' 'lab-root.cer'
+    if (-not (Test-Path $cer)) { Write-Output 'no lab-root.cer'; exit 0 }
+    foreach ($store in @('Root', 'CA', 'ClientAuthIssuer')) {
+      & certutil -f -addstore $store $cer | Out-Null
+    }
+    Write-Output 'lab-root.cer installed'
+  changed_when: false
+
+- name: Import lab server PFX into LocalMachine\My
+  ansible.windows.win_shell: |
+    $pfx = Join-Path '{{ iis_remote_cert_dir }}' 'lab-server.pfx'
+    if (-not (Test-Path $pfx)) { throw 'lab-server.pfx missing. Run .\\lab.ps1 certs on the host.' }
+    $pass = ConvertTo-SecureString '{{ iis_lab_pfx_password }}' -AsPlainText -Force
+    $thumbFile = Join-Path '{{ iis_remote_cert_dir }}' 'server.thumbprint'
+    $thumb = if (Test-Path $thumbFile) { (Get-Content $thumbFile -Raw).Trim() } else { '' }
+    $have = Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
+      Where-Object { $_.Thumbprint -eq $thumb }
+    if (-not $have) {
+      Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\LocalMachine\My -Password $pass | Out-Null
+      Write-Output 'imported'
+    } else {
+      Write-Output 'present'
+    }
+  register: pfx_import
+  changed_when: "'imported' in pfx_import.stdout"
+
+- name: Read server thumbprint
+  ansible.windows.win_shell: |
+    $f = Join-Path '{{ iis_remote_cert_dir }}' 'server.thumbprint'
+    if (Test-Path $f) { (Get-Content $f -Raw).Trim() }
+    else {
+      (Get-ChildItem Cert:\LocalMachine\My | Sort-Object NotAfter -Descending | Select-Object -First 1).Thumbprint
+    }
+  register: server_thumb
+  changed_when: false
+
+- name: Remember thumbprint
+  ansible.builtin.set_fact:
+    iis_server_thumbprint: "{{ server_thumb.stdout | trim }}"
+
+- name: Application pools (no idle timeout, no periodic recycle)
+  community.windows.win_iis_webapppool:
+    name: "{{ item.pool }}"
+    state: started
+    attributes:
+      managedRuntimeVersion: v4.0
+      managedPipelineMode: Integrated
+      processModel.idleTimeout: "00:00:00"
+      recycling.periodicRestart.time: "00:00:00"
+  loop: "{{ iis_sites }}"
+
+- name: HTTP site
+  community.windows.win_iis_website:
+    name: "{{ item.name }}"
+    state: started
+    port: "{{ item.http_port }}"
+    physical_path: "{{ iis_site_path }}"
+    application_pool: "{{ item.pool }}"
+  loop: "{{ iis_sites }}"
+
+- name: HTTPS binding
+  community.windows.win_iis_webbinding:
+    name: "{{ item.name }}"
+    protocol: https
+    port: "{{ item.https_port }}"
+    ip: "*"
+    certificate_hash: "{{ iis_server_thumbprint }}"
+    state: present
+  loop: "{{ iis_sites }}"
+
+- name: HTTP.sys — negotiate client cert, no leftover CTL
+  ansible.windows.win_shell: |
+    $ipPort = '0.0.0.0:{{ item.https_port }}'
+    $thumb = '{{ iis_server_thumbprint }}'
+    $rev = '{{ "enable" if eid_revocation else "disable" }}'
+    $ctl = '{{ eid_sslctl_store }}'.Trim()
+    $existing = & netsh http show sslcert ipport=$ipPort
+    if ($existing -match 'IP:port') {
+      & netsh http delete sslcert ipport=$ipPort
+    }
+    $add = @(
+      'http','add','sslcert',"ipport=$ipPort","certhash=$thumb",
+      "appid={{ iis_app_id }}",'certstorename=MY',
+      'clientcertnegotiation=enable',"verifyclientcertrevocation=$rev",
+      'verifyrevocationwithcachedclientcertonly=disable',
+      'usagecheck=enable','disableaia=enable'
+    )
+    if ($ctl.Length -gt 0) { $add += "sslctlstorename=$ctl" }
+    & netsh @add
+    if ($LASTEXITCODE -ne 0) { throw "netsh add sslcert $ipPort failed" }
+    Write-Output "$ipPort revocation=$rev ctl=$(if ($ctl) { $ctl } else { 'null' })"
+  loop: "{{ iis_sites }}"
+  register: sslcert
+  changed_when: true
+
+- name: IIS client-certificate mapping off (identity comes from the TLS cert)
+  ansible.windows.win_shell: |
+    $appcmd = Join-Path $env:windir 'system32\inetsrv\appcmd.exe'
+    & $appcmd set config /section:clientCertificateMappingAuthentication /enabled:false /commit:apphost
+    & $appcmd set config /section:iisClientCertificateMappingAuthentication /enabled:false /commit:apphost
+  changed_when: true
+
+- name: SSL flags — ask for the card only on Demo.svc (health stays open)
+  ansible.windows.win_shell: |
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config '{{ item.name }}' /section:access /sslFlags:None /commit:apphost
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config '{{ item.name }}/Demo.svc' /section:access /sslFlags:'Ssl,SslNegotiateCert,SslRequireCert' /commit:apphost
+  loop: "{{ iis_sites }}"
+  changed_when: true
+
+- name: ClickOnce files on the guest
+  ansible.windows.win_copy:
+    src: "{{ iis_install_local }}/"
+    dest: "{{ iis_install_path }}/"
+
+- name: ClickOnce virtual directory /install (no client certificate)
+  ansible.windows.win_shell: |
+    $appcmd = Join-Path $env:windir 'system32\inetsrv\appcmd.exe'
+    $path = '{{ iis_install_path }}'
+    $name = '{{ item.name }}'
+    New-Item -ItemType Directory -Force -Path $path | Out-Null
+    $listed = & $appcmd list vdir
+    if ($listed -match [regex]::Escape("$name/install")) {
+      & $appcmd set vdir "$name/install" /physicalPath:$path
+    } else {
+      & $appcmd add vdir /app.name:"$name/" /path:/install /physicalPath:$path
+    }
+    if ($LASTEXITCODE -ne 0) { throw "appcmd vdir $name/install failed" }
+    & $appcmd set config "$name/install" /section:access /sslFlags:None /commit:apphost
+  loop: "{{ iis_sites }}"
+
+- name: W3C fields include sc-substatus and sc-win32-status
+  ansible.windows.win_shell: |
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config /section:system.applicationHost/sites '/siteDefaults.logFile.logFormat:W3C' /commit:apphost
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config /section:system.applicationHost/sites '/siteDefaults.logFile.logExtFileFlags:{{ iis_log_fields }}' /commit:apphost
+  changed_when: false
+
+- name: Failed Request Tracing for 403
+  ansible.windows.win_shell: |
+    & "$env:windir\system32\inetsrv\appcmd.exe" set site '{{ item.name }}' /traceFailedRequestsLogging.enabled:true /traceFailedRequestsLogging.maxLogFiles:20
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config '{{ item.name }}' /section:system.webServer/tracing/traceFailedRequests /+'[path=''*'']' /commit:apphost
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config '{{ item.name }}' /section:system.webServer/tracing/traceFailedRequests /+'[path=''*''].traceAreas.[provider=''WWW Server'',areas=''Security,Authentication,RequestNotifications'',verbosity=''Verbose'']' /commit:apphost
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config '{{ item.name }}' /section:system.webServer/tracing/traceFailedRequests '/[path=''*''].failureDefinitions.statusCodes:403' /commit:apphost
+  loop: "{{ iis_sites }}"
+  when: iis_enable_freb
+  failed_when: false
+
+- name: Inbound firewall HTTP
+  community.windows.win_firewall_rule:
+    name: "IIS-ID lab inbound {{ item.http_port }}"
+    enabled: true
+    direction: in
+    action: allow
+    protocol: tcp
+    localport: "{{ item.http_port }}"
+  loop: "{{ iis_sites }}"
+
+- name: Inbound firewall HTTPS
+  community.windows.win_firewall_rule:
+    name: "IIS-ID lab inbound {{ item.https_port }}"
+    enabled: true
+    direction: in
+    action: allow
+    protocol: tcp
+    localport: "{{ item.https_port }}"
+  loop: "{{ iis_sites }}"
+
+- name: Align Web.config appSettings with this inventory
+  ansible.windows.win_shell: |
+    $path = Join-Path '{{ iis_site_path }}' 'Web.config'
+    if (-not (Test-Path $path)) { throw "Web.config missing at $path" }
+    [xml]$xml = Get-Content -Path $path
+    function Set-AppSetting([string]$key, [string]$value) {
+      $node = $xml.configuration.appSettings.add | Where-Object { $_.key -eq $key }
+      if ($node) { $node.value = $value }
+      else {
+        $el = $xml.CreateElement('add')
+        $el.SetAttribute('key', $key)
+        $el.SetAttribute('value', $value)
+        $xml.configuration.appSettings.AppendChild($el) | Out-Null
+      }
+    }
+    Set-AppSetting 'AllowLabCertificates' '{{ eid_allow_lab_certificates | lower }}'
+    Set-AppSetting 'RevocationMode' '{{ eid_revocation_mode_app }}'
+    $proxy = '{{ eid_wcf_default_proxy }}'
+    $sysnet = $xml.configuration.'system.net'
+    if ($proxy -and $proxy.Trim().Length -gt 0) {
+      if (-not $sysnet) {
+        $sysnet = $xml.CreateElement('system.net')
+        $xml.configuration.AppendChild($sysnet) | Out-Null
+      }
+      $dp = $sysnet.defaultProxy
+      if (-not $dp) {
+        $dp = $xml.CreateElement('defaultProxy')
+        $sysnet.AppendChild($dp) | Out-Null
+      }
+      $dp.SetAttribute('enabled', 'true')
+      $dp.SetAttribute('useDefaultCredentials', 'true')
+      $proxyEl = $dp.proxy
+      if (-not $proxyEl) {
+        $proxyEl = $xml.CreateElement('proxy')
+        $dp.AppendChild($proxyEl) | Out-Null
+      }
+      $proxyEl.SetAttribute('proxyaddress', $proxy)
+      $proxyEl.SetAttribute('bypassonlocal', 'true')
+    }
+    $xml.Save($path)
+  changed_when: true
+
+- name: Verify HTTP.sys asked for a client certificate
+  ansible.windows.win_shell: netsh http show sslcert ipport=0.0.0.0:{{ item.https_port }}
+  loop: "{{ iis_sites }}"
+  register: ssl_show
+  changed_when: false
+  failed_when: ssl_show.stdout is not search('Negotiate Client Certificate') and ssl_show.stdout is not search('clientcertnegotiation')

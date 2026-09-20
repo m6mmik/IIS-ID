@@ -1,0 +1,9 @@
+---
+- name: ID-card IIS backend
+  hosts: iis
+  gather_facts: true
+  serial: 1
+  roles:
+    - eid_trust
+    - winhttp_proxy
+    - iis_eid

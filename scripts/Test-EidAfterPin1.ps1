@@ -102,6 +102,7 @@ $urls = @(
     @{ Url = "http://aia.sk.ee/esteid2018";         Why = "ESTEID2018 OCSP AIA (HTTP.sys uses this)" }
     @{ Url = "http://aia.sk.ee/EE-GovCA2018";       Why = "EE-GovCA2018 OCSP AIA" }
     @{ Url = "http://ocsp.eidpki.ee";               Why = "ESTEID2025 OCSP" }
+    @{ Url = "http://crl.eidpki.ee/EEGovCA2025.crl"; Why = "EEGovCA2025 CRL (ESTEID2025 CDP)" }
     @{ Url = "http://ocsp.sk.ee";                   Why = "legacy SK OCSP" }
     @{ Url = "http://c.sk.ee/crls/esteid/esteid2018.crl"; Why = "ESTEID2018 CRL fallback" }
     @{ Url = "http://www.sk.ee/crls/esteid/esteid2018.crl"; Why = "ESTEID2018 CRL alt" }

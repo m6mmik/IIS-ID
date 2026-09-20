@@ -172,6 +172,7 @@ function Collect-Urls {
     $urls = @(
         @{ Url = "http://aia.sk.ee/esteid2018"; Why = "ESTEID2018 OCSP" }
         @{ Url = "http://ocsp.eidpki.ee"; Why = "ESTEID2025 OCSP" }
+        @{ Url = "http://crl.eidpki.ee/EEGovCA2025.crl"; Why = "EEGovCA2025 CRL" }
         @{ Url = "http://ocsp.sk.ee"; Why = "legacy SK OCSP" }
         @{ Url = "http://c.sk.ee/crls/esteid/esteid2018.crl"; Why = "ESTEID2018 CRL" }
         @{ Url = "https://c.sk.ee/esteid2018.der.crt"; Why = "ESTEID2018 cert download" }

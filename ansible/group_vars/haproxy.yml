@@ -1,0 +1,8 @@
+haproxy_bind_port: 443
+haproxy_stats_port: 8404
+haproxy_balance: roundrobin
+haproxy_health_path: /health.json
+
+# Empty = build server lines from the iis group (work: one :443 per VM).
+# Lab single-VM two-sites: set this list so both 8443 and 8444 are checked.
+haproxy_backends: []

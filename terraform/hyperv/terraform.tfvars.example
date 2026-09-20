@@ -1,0 +1,12 @@
+# copy to terraform.tfvars (gitignored)
+# iso_path is required only when IIS-ID-Server does not exist yet.
+
+# iso_path      = "C:/Users/andre/Downloads/WindowsServer.iso"
+vm_name       = "IIS-ID-Server"
+memory_gb     = 4
+cpu_count     = 2
+disk_gb       = 60
+switch_name   = "IIS-ID-Closed"
+host_ip       = "192.168.56.1"
+guest_ip      = "192.168.56.10"
+prefix_length = 24

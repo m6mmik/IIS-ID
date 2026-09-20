@@ -12,3 +12,23 @@ certs/*.crt
 certs/*.key
 certs/*.thumbprint
 !certs/.gitkeep
+certs/eid-ca/
+publish/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+
+# Ansible
+*.retry
+ansible/inventories/work.yml
+ansible/.vault_pass
+ansible/group_vars/work.yml

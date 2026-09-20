@@ -1,0 +1,63 @@
+# Work-like: WinHTTP proxy + revocation ON. Blocked/dead OCSP => 403.13
+# (0x80092013), not 403.16. Restores EE-GovCA to Root first (experiment B).
+- hosts: iis
+  gather_facts: false
+  tasks:
+    - name: Put EE-GovCA back in Root
+      ansible.windows.win_shell: |
+        $n = 0
+        Get-ChildItem C:\IIS-ID\.lab\lockdown-certs\Root-*.cer -ErrorAction SilentlyContinue | ForEach-Object {
+          & certutil -f -addstore Root $_.FullName | Out-Null
+          Write-Output $_.Name
+          $n++
+        }
+        $eid = 'C:\IIS-ID\certs\eid-ca'
+        foreach ($name in @('EE-GovCA2018.crt','EEGovCA2025.crt')) {
+          $f = Join-Path $eid $name
+          if (Test-Path $f) { & certutil -f -addstore Root $f | Out-Null; Write-Output $name; $n++ }
+        }
+        Write-Output "restored=$n"
+
+    - name: ESTEID in CA + ClientAuthIssuer
+      ansible.windows.win_shell: |
+        $eid = 'C:\IIS-ID\certs\eid-ca'
+        foreach ($name in @('ESTEID2018.crt','ESTEID2025.crt')) {
+          $f = Join-Path $eid $name
+          if (Test-Path $f) {
+            & certutil -f -addstore CA $f | Out-Null
+            & certutil -f -addstore ClientAuthIssuer $f | Out-Null
+          }
+        }
+
+    - name: HTTPS binding — revocation ON, no CTL (work OCSP path)
+      ansible.windows.win_shell: |
+        foreach ($port in 8443, 8444) {
+          $ipPort = "0.0.0.0:$port"
+          $show = & netsh http show sslcert ipport=$ipPort
+          $hash = ($show | Select-String 'Certificate Hash\s*:\s*(\S+)').Matches.Groups[1].Value
+          $app = ($show | Select-String 'Application ID\s*:\s*(\S+)').Matches.Groups[1].Value
+          & netsh http delete sslcert ipport=$ipPort
+          & netsh http add sslcert ipport=$ipPort certhash=$hash appid=$app certstorename=MY `
+            clientcertnegotiation=enable verifyclientcertrevocation=enable disableaia=enable
+          Write-Output "$ipPort revocation=enable"
+        }
+
+    - name: WinHTTP still through host lab-proxy
+      ansible.windows.win_command: >
+        netsh winhttp set proxy
+        proxy-server="http://192.168.56.2:3128"
+        bypass-list="<local>"
+
+    - name: Recycle HTTP.sys after sslcert change
+      ansible.windows.win_shell: iisreset /noforce
+
+    - name: Show the OCSP-path knobs
+      ansible.windows.win_shell: |
+        Write-Output '=== Root (GovCA must be back) ==='
+        certutil -store Root | Select-String -Pattern 'EE-GovCA|EEGovCA|ESTEID'
+        Write-Output '=== WinHTTP ==='
+        netsh winhttp show proxy
+        Write-Output '=== 0.0.0.0:8443 ==='
+        netsh http show sslcert ipport=0.0.0.0:8443 | Select-String -Pattern 'Verify Client Certificate Revocation|Ctl Store|Disable HTTP Server'
+        Write-Output '=== 0.0.0.0:8444 ==='
+        netsh http show sslcert ipport=0.0.0.0:8444 | Select-String -Pattern 'Verify Client Certificate Revocation|Ctl Store|Disable HTTP Server'

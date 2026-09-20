@@ -1,0 +1,402 @@
+﻿
+================================================================================
+RRMT ID-CARD DIAGNOSTICS — COPY EVERYTHING BETWEEN BEGIN AND END
+================================================================================
+BEGIN REPORT
+Collected   : 2026-09-17 13:01:13 +03:00
+Computer    : RR-MT-DEV-APP12
+User        : MEIE\admandreask (Admin=True)
+RRMT version: 2.1.0.271
+IIS site    : peredev.rahvastikuregister.ee
+App path    : /RRMT-2.1.0.271/CommonService.svc
+VIP host    : rrmt-app.smit.dev
+Window      : last 45 minutes for logs/events
+Fast mode   : False
+
+
+================================================================================
+QUICK VERDICT (PASS=True / FAIL=False)
+================================================================================
+WinHTTP proxy set                   PASS
+WinHTTP bypass *.smit.sise          PASS
+SSL Negotiate Client Cert           PASS
+SSL Revocation Disabled             PASS
+SSL Disable AIA (disableaia)        PASS
+SSL binding exists                  PASS
+Trust ESTEID2018 in CA              PASS
+Trust EE-GovCA2018 in Root          PASS
+Last IIS CommonService NOT 403.16   FAIL
+IdCardAuth WcfEntry seen            FAIL
+IdCardAuth WcfAuthorization ALLOW   FAIL
+
+Last IIS CommonService line:
+2026-09-17 09:56:24 10.153.177.34 POST /RRMT-2.1.0.271/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 480 6
+
+Note: IIS u_ex*.log timestamps are UTC; CertificateErrors.log is local time (EEST).
+
+================================================================================
+WINHTTP (Schannel inbound TLS — NOT Web.config)
+================================================================================
+[netsh winhttp show proxy]
+Current WinHTTP proxy settings:
+
+    Proxy Server(s) :  dcproxy.smit.sise:3128
+    Bypass List     :  *.smit.sise;*.meie.politsei.ee;<local>
+
+
+================================================================================
+NETSH SSL BINDING 0.0.0.0:443
+================================================================================
+[netsh http show sslcert]
+SSL Certificate bindings: 
+------------------------- 
+
+
+
+    IP:port                      : 0.0.0.0:443
+    Certificate Hash             : 0bca8b6fbb261ee37cf8604f69694f3d71cb044f
+    Application ID               : {4dc3e181-e14b-4a21-b022-59fc669b0914}
+    Certificate Store Name       : My
+    Verify Client Certificate Revocation : Disabled
+    Verify Revocation Using Cached Client Certificate Only : Disabled
+    Use Revocation Freshness Time : Disabled
+    Verify Revocation Using Cached URLs Only : Disabled
+    Disable Authority Info Access : Enabled
+    Usage Check                  : Enabled
+    Revocation Freshness Time    : 0
+    URL Retrieval Timeout        : 0
+    Ctl Identifier               : (null)
+    Ctl Store Name               : (null)
+    DS Mapper Usage              : Disabled
+    Negotiate Client Certificate : Enabled
+    Reject Connections           : Disabled
+    Disable HTTP2                : Not Set
+    Disable QUIC                 : Not Set
+    Disable TLS1.2               : Not Set
+    Disable TLS1.3               : Not Set
+    Disable OCSP Stapling        : Not Set
+    Enable Token Binding         : Not Set
+    Log Extended Events          : Not Set
+    Disable Legacy TLS Versions  : Not Set
+    Enable Session Ticket        : Not Set
+    Disable Session ID           : Not Set
+    Enable Caching Client Hello  : Not Set
+ Extended Property:
+    PropertyId                   : 0
+    Receive Window               : 1048576
+ Extended Property:
+    PropertyId                   : 1
+    Max Settings Per Frame       : 2796202
+    Max Settings Per Minute      : 4294967295
+ Extended Property:
+    PropertyId                   : 2
+    Send Buffering Flags         : 0x0
+    Aggressive ICW               : Not Set
+    Max Send Buffer Size         : 4294967295
+    Max Concurrent Client Streams: 100
+    Max Receive Buffer Size      : 0
+    Decrypt On SSPI Thread       : Set
+ Extended Property:
+    PropertyId                   : 3
+    TLS Restrictions             : Not Set
+ Extended Property:
+    PropertyId                   : 4
+    Error Headers                : Not Set
+    Status Code                  : 0
+ Extended Property:
+    PropertyId                   : 6
+    Cert Config                  : Not Set
+
+
+================================================================================
+SK TRUST STORE (LocalMachine)
+================================================================================
+[CA + Root thumbprints]
+Expected ESTEID2018 CA : 26DFC32284C20462BB632D1F03AA82EE00B5F170
+Expected EE-GovCA2018  : A79E631B21C902BD4C14C01D2C7D721A635D888E
+
+--- LocalMachine\CA (ESTEID*) ---
+
+Thumbprint                               Subject                                                                           NotAfter           
+----------                               -------                                                                           --------           
+A413977CEAE9C8F01CB66196B9352BA40E407E5C C=EE, O=Zetes Estonia OÜ, OID.2.5.4.97=NTREE-17066049, CN=ESTEID2025              03.05.2040 16:20:06
+7223A347FFBE80715B28AFBE1F73697525F39B94 CN=ESTEID-SK 2015, OID.2.5.4.97=NTREE-10747013, O=AS Sertifitseerimiskeskus, C=EE 18.12.2030 01:59:59
+26DFC32284C20462BB632D1F03AA82EE00B5F170 CN=ESTEID2018, OID.2.5.4.97=NTREE-10747013, O=SK ID Solutions AS, C=EE            05.09.2033 12:11:03
+
+
+
+--- LocalMachine\Root (GovCA*) ---
+
+Thumbprint                               Subject                                                                  NotAfter           
+----------                               -------                                                                  --------           
+F675E71B1AA90F137792CB240673D3AD7DAFAEAE C=EE, O=Zetes Estonia OÜ, OID.2.5.4.97=NTREE-17066049, CN=EEGovCA2025    05.05.2040 11:18:12
+A79E631B21C902BD4C14C01D2C7D721A635D888E CN=EE-GovCA2018, OID.2.5.4.97=NTREE-10747013, O=SK ID Solutions AS, C=EE 05.09.2033 12:11:03
+F675E71B1AA90F137792CB240673D3AD7DAFAEAE C=EE, O=Zetes Estonia OÜ, OID.2.5.4.97=NTREE-17066049, CN=EEGovCA2025    05.05.2040 11:18:12
+A79E631B21C902BD4C14C01D2C7D721A635D888E CN=EE-GovCA2018, OID.2.5.4.97=NTREE-10747013, O=SK ID Solutions AS, C=EE 05.09.2033 12:11:03
+
+
+================================================================================
+CERTUTIL CLIENT CERT (optional, max 45s)
+================================================================================
+[certutil -verify -urlfetch C:\Temp\auth.cer]
+ERROR: A parameter cannot be found that matches parameter name 'Force'.
+
+
+================================================================================
+IIS SSL FLAGS
+================================================================================
+[appcmd peredev.rahvastikuregister.ee/RRMT-2.1.0.271 /access]
+<system.webServer>
+  <security>
+    <access sslFlags="Ssl, SslNegotiateCert" />
+  </security>
+</system.webServer>
+
+
+================================================================================
+IIS LOG — last CommonService lines (tail scan, version RRMT-2.1.0.271)
+================================================================================
+[u_ex*.log tail]
+2026-09-17 08:07:11 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 503 9161
+2026-09-17 08:07:13 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 479 6
+2026-09-17 08:57:58 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 503 38
+2026-09-17 08:57:58 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 480 3
+2026-09-17 08:59:58 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 501 2522
+2026-09-17 08:59:58 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 480 35
+2026-09-17 09:13:20 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 503 4
+2026-09-17 09:13:21 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 480 2
+2026-09-17 09:15:26 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 504 2690
+2026-09-17 09:15:27 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 480 3
+2026-09-17 09:32:36 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 504 2683
+2026-09-17 09:32:36 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 479 3
+2026-09-17 09:43:27 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 504 2525
+2026-09-17 09:43:27 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 481 9
+2026-09-17 09:48:06 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 502 3
+2026-09-17 09:48:06 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 480 3
+2026-09-17 09:50:44 10.153.177.34 POST /RRMT-2.1.0.270/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 503 3
+2026-09-17 09:56:24 10.153.177.34 POST /RRMT-2.1.0.271/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 503 8593
+2026-09-17 09:56:24 10.153.177.34 POST /RRMT-2.1.0.271/CommonService.svc - 443 - 10.150.64.182 - - 403 16 2148204809 1416 480 6
+
+IIS 403 hints: 16=client cert chain/AIA (before WCF) | 13=revocation | 7=cert required
+
+================================================================================
+APPLICATION LOG [IdCardAuth]
+================================================================================
+[CertificateErrors*.log]
+12:56:24,519 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.271/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:56:25,393 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.271/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+11:07:10,949 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+11:07:13,383 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+11:57:58,040 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+11:57:58,567 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+11:59:58,515 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+11:59:59,524 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:13:20,208 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:13:21,355 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:15:26,491 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:15:27,620 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:27:30,158 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:27:31,022 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:32:36,539 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:32:37,390 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:43:26,991 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:43:27,827 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:48:06,919 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:48:07,320 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+12:50:44,058 [CertificateError] INFO - [IdCardAuth] Stage=AspNetEndRequest Method=POST Path=/RRMT-2.1.0.270/CommonService.svc RemoteIP=10.150.64.182 ClientCert Present=true Valid=True Thumbprint=0892F5F195A47D02307438FE7CE59C4F220F69CA Subject='C=EE, CN="KUUSKARU,ANDREAS,39904250267", SN=KUUSKARU, G=ANDREAS, SERIALNUMBER=PNOEE-39904250267' HttpStatus=403
+
+
+================================================================================
+NETWORK PROBES (10-15s timeout each)
+================================================================================
+[ocsp.smit.sise direct]
+The operation has timed out.
+
+[c.sk.ee via proxy]
+Proxy: HTTP 200 Length=1371
+
+[esteid.ldap.sk.ee:636]
+
+
+TcpTestSucceeded : True
+RemoteAddress    : 91.223.243.49
+
+
+================================================================================
+SCHANNEL SYSTEM LOG
+================================================================================
+[last 45 min]
+
+
+TimeCreated : 17.09.2026 13:00:42
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+TimeCreated : 17.09.2026 12:50:42
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+TimeCreated : 17.09.2026 12:45:42
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+TimeCreated : 17.09.2026 12:43:42
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+TimeCreated : 17.09.2026 12:42:42
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+TimeCreated : 17.09.2026 12:37:14
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+TimeCreated : 17.09.2026 12:32:14
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+TimeCreated : 17.09.2026 12:30:14
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+TimeCreated : 17.09.2026 12:29:14
+Id          : 36928
+Message     : Could not retrieve an OCSP response.
+              
+                 The Failure Reason is: REASON_OCSP_RESPONSE_RETRIEVAL_ERROR
+                  The OCSP Url is: http://ocsp.smit.sise/ocsp
+                 The previous OCSP response contained the following times:
+                    ThisUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+                    NextUpdate: ‎1601‎-‎01‎-‎01T00:00:00.000000000Z
+              
+              The attached data contains the certificate.
+
+
+================================================================================
+CAPI2 OPERATIONAL (ESTEID / ocsp.smit / lsass — needs Admin)
+================================================================================
+[filtered XML since 12:16:13 (max 25 events)]
+---- 09/17/2026 13:02:19 EventId=11 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>11</EventID><Version>0</Version><Level>2</Level><Task>11</Task><Opcode>2</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.7199244Z'/><EventRecordID>12238</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7c09-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChain><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/><ValidationTime>2024-07-26T20:04:44.210Z</ValidationTime><AdditionalStore><Certificate fileRef='580A6F4CC4E4B669B9EBDC1B2B3E087B80D0678D.cer' subjectName='Microsoft Windows Production PCA 2011'/><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><Certificate fileRef='36056A5662DCADECF82CC14C8B80EC5E0BCC59A6.cer' subjectName='Microsoft Time-Stamp PCA 2010'/><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/></AdditionalStore><ExtendedKeyUsage><Usage oid='1.3.6.1.5.5.7.3.8' name='Time Stamping'/></ExtendedKeyUsage><Flags value='C8000005' CERT_CHAIN_CACHE_END_CERT='true' CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL='true' CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT='true' CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY='true' CERT_CHAIN_REVOCATION_ACCUMULATIVE_TIMEOUT='true'/><ChainEngineInfo context='user'/><CertificateChain chainRef='{4D55373F-9E77-4595-8C91-83E3E0E630F7}'><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='100' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ChainElement><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='4096'/><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage><Usage oid='1.3.6.1.5.5.7.3.8' name='Time Stamping'/></ApplicationUsage><IssuanceUsage/><RevocationInfo><RevocationResult value='80092013'>The revocation function was unable to check revocation because the revocation server was offline.</RevocationResult></RevocationInfo></ChainElement><ChainElement><Certificate fileRef='36056A5662DCADECF82CC14C8B80EC5E0BCC59A6.cer' subjectName='Microsoft Time-Stamp PCA 2010'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='4096'/><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage><Usage oid='1.3.6.1.5.5.7.3.8' name='Time Stamping'/></ApplicationUsage><IssuanceUsage><Usage oid='1.3.6.1.4.1.311.76.509.1.1'/></IssuanceUsage><RevocationInfo><RevocationResult value='80092013'>The revocation function was unable to check revocation because the revocation server was offline.</RevocationResult></RevocationInfo></ChainElement><ChainElement><Certificate fileRef='3B1EFD3A66EA28B16697394703A72CA340A05BD5.cer' subjectName='Microsoft Root Certificate Authority 2010'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RS... [truncated]
+
+---- 09/17/2026 13:02:19 EventId=10 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>10</EventID><Version>0</Version><Level>4</Level><Task>11</Task><Opcode>1</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.7188921Z'/><EventRecordID>12233</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7c09-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChainStart><EventAuxInfo ProcessName='powershell.exe'/><CorrelationAuxInfo TaskId='{043D8582-3DE1-41A3-8D75-3AE25F68E682}' SeqNumber='10'/></CertGetCertificateChainStart></UserData></Event>
+
+---- 09/17/2026 13:02:19 EventId=11 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>11</EventID><Version>0</Version><Level>2</Level><Task>11</Task><Opcode>2</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.7181579Z'/><EventRecordID>12232</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7c09-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChain><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><ValidationTime>2024-07-26T20:04:44.210Z</ValidationTime><AdditionalStore><Certificate fileRef='580A6F4CC4E4B669B9EBDC1B2B3E087B80D0678D.cer' subjectName='Microsoft Windows Production PCA 2011'/><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><Certificate fileRef='36056A5662DCADECF82CC14C8B80EC5E0BCC59A6.cer' subjectName='Microsoft Time-Stamp PCA 2010'/><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/></AdditionalStore><ExtendedKeyUsage orMatch='true'><Usage oid='1.3.6.1.4.1.311.10.3.5' name='Windows Hardware Driver Verification'/><Usage oid='1.3.6.1.4.1.311.10.3.6' name='Windows System Component Verification'/><Usage oid='1.3.6.1.4.1.311.10.3.7' name='OEM Windows System Component Verification'/><Usage oid='1.3.6.1.4.1.311.61.4.1' name='Early Launch Antimalware Driver'/></ExtendedKeyUsage><Flags value='C8000005' CERT_CHAIN_CACHE_END_CERT='true' CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL='true' CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT='true' CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY='true' CERT_CHAIN_REVOCATION_ACCUMULATIVE_TIMEOUT='true'/><ChainEngineInfo context='user'/><CertificateChain chainRef='{1313302E-5A06-40EE-9BCD-B3DD7BDB9C9A}'><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='100' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ChainElement><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='2048'/><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage><Usage oid='1.3.6.1.4.1.311.10.3.6' name='Windows System Component Verification'/><Usage oid='1.3.6.1.5.5.7.3.3' name='Code Signing'/></ApplicationUsage><IssuanceUsage/><RevocationInfo><RevocationResult value='80092013'>The revocation function was unable to check revocation because the revocation server was offline.</RevocationResult></RevocationInfo></ChainElement><ChainElement><Certificate fileRef='580A6F4CC4E4B669B9EBDC1B2B3E087B80D0678D.cer' subjectName='Microsoft Windows Production PCA 2011'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='2048'/><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage any='true'/><IssuanceUsage/><RevocationInfo><RevocationResult value='80092013'>The revocation function was unable to check revocation because the revocation server was offline.</RevocationResult></RevocationInfo... [truncated]
+
+---- 09/17/2026 13:02:19 EventId=10 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>10</EventID><Version>0</Version><Level>4</Level><Task>11</Task><Opcode>1</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.7170001Z'/><EventRecordID>12227</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7c09-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChainStart><EventAuxInfo ProcessName='powershell.exe'/><CorrelationAuxInfo TaskId='{043D8582-3DE1-41A3-8D75-3AE25F68E682}' SeqNumber='4'/></CertGetCertificateChainStart></UserData></Event>
+
+---- 09/17/2026 13:02:19 EventId=11 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>11</EventID><Version>0</Version><Level>2</Level><Task>11</Task><Opcode>2</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.7159284Z'/><EventRecordID>12226</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7c09-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChain><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/><AdditionalStore><Certificate fileRef='580A6F4CC4E4B669B9EBDC1B2B3E087B80D0678D.cer' subjectName='Microsoft Windows Production PCA 2011'/><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><Certificate fileRef='36056A5662DCADECF82CC14C8B80EC5E0BCC59A6.cer' subjectName='Microsoft Time-Stamp PCA 2010'/><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/></AdditionalStore><ExtendedKeyUsage/><Flags value='4' CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL='true'/><ChainEngineInfo context='user'/><CertificateChain chainRef='{141485BC-0109-47A0-A169-79ABFAA44416}'><TrustStatus><ErrorStatus value='1' CERT_TRUST_IS_NOT_TIME_VALID='true'/><InfoStatus value='100' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ChainElement><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='4096'/><TrustStatus><ErrorStatus value='1' CERT_TRUST_IS_NOT_TIME_VALID='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage><Usage oid='1.3.6.1.5.5.7.3.8' name='Time Stamping'/></ApplicationUsage><IssuanceUsage/></ChainElement><ChainElement><Certificate fileRef='36056A5662DCADECF82CC14C8B80EC5E0BCC59A6.cer' subjectName='Microsoft Time-Stamp PCA 2010'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='4096'/><TrustStatus><ErrorStatus value='0'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage><Usage oid='1.3.6.1.5.5.7.3.8' name='Time Stamping'/></ApplicationUsage><IssuanceUsage><Usage oid='1.3.6.1.4.1.311.76.509.1.1'/></IssuanceUsage></ChainElement><ChainElement><Certificate fileRef='3B1EFD3A66EA28B16697394703A72CA340A05BD5.cer' subjectName='Microsoft Root Certificate Authority 2010'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='4096'/><TrustStatus><ErrorStatus value='0'/><InfoStatus value='10C' CERT_TRUST_HAS_NAME_MATCH_ISSUER='true' CERT_TRUST_IS_SELF_SIGNED='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage any='true'/><IssuanceUsage any='true'/></ChainElement></CertificateChain><EventAuxInfo ProcessName='powershell.exe'/><CorrelationAuxInfo TaskId='{043D8582-3DE1-41A3-8D75-3AE25F68E682}' SeqNumber='3'/><Result value='800B0101'>A required certificate is not within its validity period when verifying against the current system clock or the timestamp in the signed file.</Result></CertGetCertificateChain></UserData></Event>
+
+---- 09/17/2026 13:02:19 EventId=10 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>10</EventID><Version>0</Version><Level>4</Level><Task>11</Task><Opcode>1</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.7153239Z'/><EventRecordID>12225</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7c09-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChainStart><EventAuxInfo ProcessName='powershell.exe'/><CorrelationAuxInfo TaskId='{043D8582-3DE1-41A3-8D75-3AE25F68E682}' SeqNumber='2'/></CertGetCertificateChainStart></UserData></Event>
+
+---- 09/17/2026 13:02:19 EventId=11 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>11</EventID><Version>0</Version><Level>2</Level><Task>11</Task><Opcode>2</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.6628156Z'/><EventRecordID>12217</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7609-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChain><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/><ValidationTime>2024-07-26T20:04:44.210Z</ValidationTime><AdditionalStore><Certificate fileRef='580A6F4CC4E4B669B9EBDC1B2B3E087B80D0678D.cer' subjectName='Microsoft Windows Production PCA 2011'/><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><Certificate fileRef='36056A5662DCADECF82CC14C8B80EC5E0BCC59A6.cer' subjectName='Microsoft Time-Stamp PCA 2010'/><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/></AdditionalStore><ExtendedKeyUsage><Usage oid='1.3.6.1.5.5.7.3.8' name='Time Stamping'/></ExtendedKeyUsage><Flags value='C8000005' CERT_CHAIN_CACHE_END_CERT='true' CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL='true' CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT='true' CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY='true' CERT_CHAIN_REVOCATION_ACCUMULATIVE_TIMEOUT='true'/><ChainEngineInfo context='user'/><CertificateChain chainRef='{4C22D0DE-9F55-432D-AB70-94F71EF28E6A}'><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='100' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ChainElement><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='4096'/><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage><Usage oid='1.3.6.1.5.5.7.3.8' name='Time Stamping'/></ApplicationUsage><IssuanceUsage/><RevocationInfo><RevocationResult value='80092013'>The revocation function was unable to check revocation because the revocation server was offline.</RevocationResult></RevocationInfo></ChainElement><ChainElement><Certificate fileRef='36056A5662DCADECF82CC14C8B80EC5E0BCC59A6.cer' subjectName='Microsoft Time-Stamp PCA 2010'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='4096'/><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage><Usage oid='1.3.6.1.5.5.7.3.8' name='Time Stamping'/></ApplicationUsage><IssuanceUsage><Usage oid='1.3.6.1.4.1.311.76.509.1.1'/></IssuanceUsage><RevocationInfo><RevocationResult value='80092013'>The revocation function was unable to check revocation because the revocation server was offline.</RevocationResult></RevocationInfo></ChainElement><ChainElement><Certificate fileRef='3B1EFD3A66EA28B16697394703A72CA340A05BD5.cer' subjectName='Microsoft Root Certificate Authority 2010'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RS... [truncated]
+
+---- 09/17/2026 13:02:19 EventId=10 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>10</EventID><Version>0</Version><Level>4</Level><Task>11</Task><Opcode>1</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.6615399Z'/><EventRecordID>12212</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7609-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChainStart><EventAuxInfo ProcessName='powershell.exe'/><CorrelationAuxInfo TaskId='{AD7F7D5E-F7E2-4C25-B24C-7BA7A6FF23BC}' SeqNumber='10'/></CertGetCertificateChainStart></UserData></Event>
+
+---- 09/17/2026 13:02:19 EventId=11 ----
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-CAPI2' Guid='{5bbca4a8-b209-48dc-a8c7-b23d3e5216fb}'/><EventID>11</EventID><Version>0</Version><Level>2</Level><Task>11</Task><Opcode>2</Opcode><Keywords>0x4000000000000003</Keywords><TimeCreated SystemTime='2026-09-17T10:02:19.6606448Z'/><EventRecordID>12211</EventRecordID><Correlation ActivityID='{78ea7093-4621-0000-7609-06792146dd01}'/><Execution ProcessID='7412' ThreadID='7116'/><Channel>Microsoft-Windows-CAPI2/Operational</Channel><Computer>rr-mt-dev-app12.meie.politsei.ee</Computer><Security UserID='S-1-5-21-2438877578-3374005517-1190125741-163881'/></System><UserData><CertGetCertificateChain><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><ValidationTime>2024-07-26T20:04:44.210Z</ValidationTime><AdditionalStore><Certificate fileRef='580A6F4CC4E4B669B9EBDC1B2B3E087B80D0678D.cer' subjectName='Microsoft Windows Production PCA 2011'/><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><Certificate fileRef='36056A5662DCADECF82CC14C8B80EC5E0BCC59A6.cer' subjectName='Microsoft Time-Stamp PCA 2010'/><Certificate fileRef='6B8BDE377052C7D937D011F074E522C80A0EF808.cer' subjectName='Microsoft Time-Stamp Service'/></AdditionalStore><ExtendedKeyUsage orMatch='true'><Usage oid='1.3.6.1.4.1.311.10.3.5' name='Windows Hardware Driver Verification'/><Usage oid='1.3.6.1.4.1.311.10.3.6' name='Windows System Component Verification'/><Usage oid='1.3.6.1.4.1.311.10.3.7' name='OEM Windows System Component Verification'/><Usage oid='1.3.6.1.4.1.311.61.4.1' name='Early Launch Antimalware Driver'/></ExtendedKeyUsage><Flags value='C8000005' CERT_CHAIN_CACHE_END_CERT='true' CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL='true' CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT='true' CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY='true' CERT_CHAIN_REVOCATION_ACCUMULATIVE_TIMEOUT='true'/><ChainEngineInfo context='user'/><CertificateChain chainRef='{F9931AF4-1658-4356-9678-9C6CA7804902}'><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='100' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ChainElement><Certificate fileRef='71F53A26BB1625E466727183409A30D03D7923DF.cer' subjectName='Microsoft Windows'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='2048'/><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage><Usage oid='1.3.6.1.4.1.311.10.3.6' name='Windows System Component Verification'/><Usage oid='1.3.6.1.5.5.7.3.3' name='Code Signing'/></ApplicationUsage><IssuanceUsage/><RevocationInfo><RevocationResult value='80092013'>The revocation function was unable to check revocation because the revocation server was offline.</RevocationResult></RevocationInfo></ChainElement><ChainElement><Certificate fileRef='580A6F4CC4E4B669B9EBDC1B2B3E087B80D0678D.cer' subjectName='Microsoft Windows Production PCA 2011'/><SignatureAlgorithm oid='1.2.840.113549.1.1.11' hashName='SHA256' publicKeyName='RSA'/><PublicKeyAlgorithm oid='1.2.840.113549.1.1.1' publicKeyName='RSA' publicKeyLength='2048'/><TrustStatus><ErrorStatus value='1000040' CERT_TRUST_REVOCATION_STATUS_UNKNOWN='true' CERT_TRUST_IS_OFFLINE_REVOCATION='true'/><InfoStatus value='102' CERT_TRUST_HAS_KEY_MATCH_ISSUER='true' CERT_TRUST_HAS_PREFERRED_ISSUER='true'/></TrustStatus><ApplicationUsage any='true'/><IssuanceUsage/><RevocationInfo><RevocationResult value='80092013'>The revocation function was unable to check revocation because the revocation server was offline.</RevocationResult></RevocationInfo... [truncated]
+
+
+================================================================================
+DEPLOY / RRMT FOLDER
+================================================================================
+[Deploy-RRMT.ps1 + WcfExtensions.dll]
+
+FullName                          LastWriteTime      
+--------                          -------------      
+E:\RRMT\2.1.0.271\Deploy-RRMT.ps1 17.09.2026 12:53:54
+E:\RRMT\2.1.0.271\WebServices\bin\Pereregister.WcfExtensions.dll | version 0.0.421.0 | 17.09.2026 12:49:28
+
+
+================================================================================
+HOW TO USE THIS REPORT
+================================================================================
+1. Run AFTER one failed ID-card login (VIP or direct).
+2. Run on BOTH app servers (app11 + app12).
+3. Copy entire output from "BEGIN REPORT" through "END REPORT" and paste to chat.
+4. If script hangs: use -Fast, or run quick commands in checklist doc.
+5. For best CAPI2 detail: PowerShell "Run as administrator".
+
+Expected when login works:
+  - QUICK VERDICT: SSL Disable AIA = PASS, Last IIS NOT 403.16 = PASS
+  - IIS log: POST ... CommonService.svc ... 200 ...
+  - [IdCardAuth]: WcfEntry -> CertValidation -> WcfAuthorization ALLOW
+
+END REPORT
+
+.\lab.ps1 hyperv                        # eelvaade (just jooksutasin — 99 paketti, 13 gruppi)
+scripts\Enable-HyperVHome.ps1           # ADMIN, ~mõni minut, siis REBOOT
+Get-Command New-VM ; Get-VMSwitch       # ainus aus kontroll pärast reboot'i
+.\lab.ps1 vm C:\Users\andre\Downloads\WindowsServer.iso   # ADMIN: Internal switch + VM + ISO + guest services

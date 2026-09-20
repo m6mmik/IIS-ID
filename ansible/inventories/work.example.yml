@@ -1,0 +1,43 @@
+# Copy to work.yml (gitignored) or generate from terraform/nutanix output
+# ansible_inventory. Same roles as the lab; only addresses and ports change.
+
+all:
+  children:
+    iis:
+      hosts:
+        iis-id-iis-1:
+          ansible_host: 10.0.0.11
+        iis-id-iis-2:
+          ansible_host: 10.0.0.12
+      vars:
+        ansible_connection: winrm
+        ansible_user: "{{ lookup('env', 'IIS_WINRM_USER') }}"
+        ansible_password: "{{ lookup('env', 'IIS_WINRM_PASSWORD') }}"
+        ansible_port: 5985
+        ansible_winrm_transport: ntlm
+        ansible_winrm_server_cert_validation: ignore
+        eid_https_port: 443
+        eid_health_port: 8080
+        # Closed VM: copy certs/eid-ca from the controller. Do not download from SK.
+        eid_download_certs: false
+        eid_allow_lab_certificates: false
+        # PIN1 works with no egress when the four CA files are already in stores
+        # and revocation is off. Turn both on only after WinHTTP + SK URLs exist.
+        eid_revocation: false
+        eid_revocation_mode_app: NoCheck
+        # Direct SK (empty) or corporate proxy. Same URL as Web.config defaultProxy.
+        # eid_winhttp_proxy: "http://proxy.corp.local:8080"
+        # eid_winhttp_bypass: "*.sise;<local>"
+        # eid_wcf_default_proxy: "{{ eid_winhttp_proxy }}"
+        eid_winhttp_proxy: ""
+        eid_sslctl_store: ""
+        iis_sites:
+          - name: Demo
+            pool: DemoPool
+            http_port: 8080
+            https_port: 443
+    haproxy:
+      hosts:
+        iis-id-haproxy:
+          ansible_host: 10.0.0.2
+          ansible_user: "{{ lookup('env', 'HAPROXY_SSH_USER') | default('root', true) }}"

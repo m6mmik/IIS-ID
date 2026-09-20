@@ -1,0 +1,47 @@
+iis_site_path: C:\IIS-ID\src\Demo.Service
+iis_copy_app: true
+iis_enable_freb: false
+iis_app_id: "{4dc3e181-e14b-4a21-b022-59fc669b0914}"
+
+# Lab: two sites on one VM (same as Install-LabServer.ps1).
+# Work inventory overrides this to one site on :443 / :8080 per host.
+iis_sites:
+  - name: Backend1
+    pool: Backend1Pool
+    http_port: 8080
+    https_port: 8443
+  - name: Backend2
+    pool: Backend2Pool
+    http_port: 8081
+    https_port: 8444
+
+iis_features:
+  - Web-Server
+  - Web-Common-Http
+  - Web-Default-Doc
+  - Web-Static-Content
+  - Web-Http-Errors
+  - Web-Http-Logging
+  - Web-Request-Monitor
+  - Web-Http-Tracing
+  - Web-Net-Ext45
+  - Web-Asp-Net45
+  - Web-ISAPI-Ext
+  - Web-ISAPI-Filter
+  - Web-Client-Auth
+  - Web-Cert-Auth
+  - Web-Mgmt-Console
+  - Web-Scripting-Tools
+  - NET-Framework-45-ASPNET
+  - NET-WCF-HTTP-Activation45
+
+iis_log_fields: "Date,Time,ClientIP,UserName,SiteName,ComputerName,ServerIP,ServerPort,Method,UriStem,UriQuery,HttpStatus,HttpSubStatus,Win32Status,TimeTaken,ProtocolVersion,Host,UserAgent"
+
+# Lab CA + server PFX live on the controller after .\lab.ps1 certs
+iis_lab_ca: "{{ playbook_dir }}/../certs/lab-root.cer"
+iis_lab_pfx: "{{ playbook_dir }}/../certs/lab-server.pfx"
+iis_lab_pfx_password: lab
+iis_lab_thumbprint_file: "{{ playbook_dir }}/../certs/server.thumbprint"
+iis_remote_cert_dir: C:\IIS-ID\certs
+iis_install_path: C:\IIS-ID\publish\clickonce
+iis_install_local: "{{ playbook_dir }}/../publish/clickonce"
