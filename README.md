@@ -36,7 +36,7 @@ Ametlik serveripoolne juhend: [IIS veebiserverile ID-kaardi toe seadistamine](ht
 12. [Tööl kontrollida (labi järeldused)](#tööl-kontrollida-labi-järeldused)
 13. [Toodangu IIS: ID-kaardi ahel ja paigaldus](#toodangu-iis-id-kaardi-ahel-ja-paigaldus)
 14. [Täpsed IIS seaded](#täpsed-iis-seaded)
-15. [ClickOnce: setup.exe ja .application](#clickonce-setupexe-ja-application)
+15. [ClickOnce SSL-iga: setup.exe laeb rakenduse alla](#clickonce-ssl-iga-setupexe-laeb-rakenduse-alla)
 16. [URL-id, mida IIS peab kätte saama (AIA / OCSP / CRL)](#url-id-mida-iis-peab-kätte-saama-aia--ocsp--crl)
 17. [WCF Web.config proxy vs WinHTTP](#wcf-webconfig-proxy-vs-winhttp)
 18. [HAProxy (passthrough, kaks kihti)](#haproxy-passthrough-kaks-kihti)
@@ -787,39 +787,19 @@ mTLS **töötab TLS 1.2-ga täiesti korralikult**: `clientcertnegotiation=enable
 
 ---
 
-## ClickOnce: setup.exe ja .application
+## ClickOnce SSL-iga: setup.exe laeb rakenduse alla
 
-Sümptom tööl: Edge’is avatud `.application` paigaldab rakenduse ära. Sama kausta `setup.exe` tahab sama faili alla laadida, saab vea ja paigaldus ei alga. Mõlemad lähevad **samale aadressile**. Erinevus on klient, mitte tee.
+Eesmärk: `https://install.firma.ee:8443/install/App.application` peab `setup.exe` kaudu alla tulema. PIN1 jääb teenuse porti `:443`, kus `clientcertnegotiation=enable`.
 
-`.application` link on tavaline lehe avamine. Brauser teeb TLS-kätluse ise. Kui server küsib kliendiserti, tuleb aken; kasutaja saab selle tühistada ja brauser jätkab ilma serdita. Kui see rada serti ei nõua, tuleb fail alla ja ClickOnce (`dfshim`) paigaldab selle pealt.
+Sümptom, millest see algab: Edge’is avatud `.application` paigaldab rakenduse ära, sama kausta `setup.exe` saab sama faili pealt vea ja paigaldus ei alga. Mõlemad lähevad samale aadressile. Brauser näitab serdiakent ja oskab jätkata ilma serdita. `setup.exe` on bootstrapper: ta loeb publish’i ajal sisse kirjutatud URL-i (Installation folder URL) ja laadib `.application` ise, `URLDownloadToCacheFile` kaudu, uue TLS-ühendusena. Kui kätlus küsib kliendiserti, katkeb allalaadimine enne HTTP-d.
 
-`setup.exe` on Visual Studio bootstrapper, mitte rakendus ise. Ta ei ava brauserit. Aadress on publish’i ajal sisse kirjutatud (Installation folder URL) ja alla laadib ta `.application` ise, `URLDownloadToCacheFile` kaudu, **uue** TLS-ühendusena. Kui kätlus küsib kliendiserti, ei ole tal valikut „jätka ilma serdita“. Allalaadimine katkeb ja paigaldus ei alga. Tihti ei teki IIS-i logisse üldse rida, sest HTTP-ni ei jõuta.
+`clientcertnegotiation` on HTTP.sys-i bindingu lipp, mitte raja seade. Kätlus küsib serti enne, kui URL on teada, seepärast `sslFlags="None"` kaustal `/install` brauserit päästab ja `setup.exe`-d mitte. Kaks nime ühel `0.0.0.0:443` seosel jagavad seda lippu. Paigaldus saab oma HTTPS-pordi, millel lipp on `disable`. Teenuse `:443` jääb puutumata.
 
-### Miks raja `sslFlags` ei aita
+Allpool on kogu muudatus: IIS, HAProxy, tulemüür, publish. Üks neist vahele jätta jätab `setup.exe` vana serdi-pordi peale.
 
-`clientcertnegotiation` on HTTP.sys-i **bindingu** lipp (`ipport` või `hostnameport`). Kätlus küsib serti enne, kui URL on teada. `sslFlags="None"` kaustal `/install` ütleb ainult seda, et IIS pärast kätlust serti ei nõua. Brauser elab küsimise üle, `setup.exe` mitte.
+### 1. IIS: eraldi HTTPS-port
 
-Teenuse HTTPS-porti ära puutu. Seal peab `clientcertnegotiation=enable` jääma, muidu PIN1 kaob. Labis on paigaldus `http://demo.local:8080/install/` ja kaart `https://demo.local:9443/Demo.svc`.
-
-Kui MIME on vale (puudub `application/x-ms-application`), kukub läbi just brauseri link: Edge salvestab faili alla ja ClickOnce ei käivitu. `setup.exe` MIME-t ei vaata. See on vastupidine sümptom.
-
-### Parandus
-
-Paigaldus-URL peab olema bindingul, mille kätlus kliendiserti ei küsi. Kolm asja korraga:
-
-1. Eraldi port, millel `clientcertnegotiation` on väljas. HTTP on lihtsaim (labi `:8080`). Kui paigaldus peab olema HTTPS, tee teine port ja seo sert `clientcertnegotiation=disable`.
-2. Sellel kaustal Anonymous Authentication sees, Windows Authentication väljas, `sslFlags` tühi. Windows-auth annab sama sümptomi staatusega **401**: brauser saadab Negotiate/NTLM ise ära, bootstrapper mitte.
-3. Uus publish. `setup.exe` ja manifesti `deploymentProvider` peavad näitama seda uut aadressi. Vana `setup.exe` jääb vana pordi külge. Sama aadress jääb serdivabaks ka hilisemate uuenduste jaoks — ClickOnce käib sealt ka pärast esimest paigaldust.
-
-Kaks hostinime ühel `0.0.0.0:443` seosel jagavad ühte lippu. Eraldi nimi aitab ainult siis, kui paigaldusel on oma `hostnameport` seos ja sellel on `clientcertnegotiation=disable`. Load balanceris see port ei tohi minna läbi VIP-i, mille taga IIS serti küsib. TCP passthrough laseb SNI IIS-ini, aga üks `ipport`-seos on ikka üks.
-
-```text
-appcmd set config "Sait/install" /section:access /sslFlags:None /commit:apphost
-appcmd set config "Sait/install" /section:system.webServer/security/authentication/anonymousAuthentication /enabled:true /commit:apphost
-appcmd set config "Sait/install" /section:system.webServer/security/authentication/windowsAuthentication /enabled:false /commit:apphost
-```
-
-HTTP-pordil ei tohi `netsh http show sslcert` ridu olla. Eraldi HTTPS-port:
+Lisa saidile binding `*:8443:` ja seo sama serverisert, mida klient juba usaldab. `setup.exe` ei saa serdihoiatust „jätka ikka“ nupuga üle vajutada. Seejärel keela sellel pordil kliendiserdi küsimine:
 
 ```text
 netsh http add sslcert ipport=0.0.0.0:8443 ^
@@ -829,7 +809,58 @@ netsh http add sslcert ipport=0.0.0.0:8443 ^
     clientcertnegotiation=disable
 ```
 
-Pärast publish’i vaata, kuhu `setup.exe` päriselt läheb:
+Kontroll: `netsh http show sslcert ipport=0.0.0.0:8443` ütleb Negotiate Client Certificate = Disabled. Pordil `0.0.0.0:443` jääb Enabled.
+
+`/install` kaust sellel saidil: Anonymous sees, Windows Authentication väljas, SSL ei nõua serti.
+
+```text
+appcmd set config "Sait/install" /section:access /sslFlags:None /commit:apphost
+appcmd set config "Sait/install" /section:system.webServer/security/authentication/anonymousAuthentication /enabled:true /commit:apphost
+appcmd set config "Sait/install" /section:system.webServer/security/authentication/windowsAuthentication /enabled:false /commit:apphost
+```
+
+Windows-auth annab sama sümptomi staatusega **401**: brauser saadab Negotiate ise ära, bootstrapper mitte.
+
+Kausta `web.config` peab ClickOnce’i laiendid ära serveerima. Ilma `.application` MIME-ta salvestab Edge faili alla ja link ei käivitu. `setup.exe` MIME-t ei vaata.
+
+```xml
+<configuration>
+  <system.webServer>
+    <staticContent>
+      <remove fileExtension=".application" />
+      <remove fileExtension=".manifest" />
+      <remove fileExtension=".deploy" />
+      <mimeMap fileExtension=".application" mimeType="application/x-ms-application" />
+      <mimeMap fileExtension=".manifest" mimeType="application/x-ms-manifest" />
+      <mimeMap fileExtension=".deploy" mimeType="application/octet-stream" />
+    </staticContent>
+  </system.webServer>
+</configuration>
+```
+
+### 2. HAProxy: sama port, mõlemad kihid
+
+Olemasolev `:443` frontend jääb alles. `mode tcp` ei näe URL-i, nii et `/install` ei saa sealt kõrvale juhtida. HAProxy ise serti ei küsi; kui `setup.exe` aadress on endiselt VIP-i port 443, maandub TCP ikka IIS-i serdi-bindingule.
+
+Lisa välisesse ja sisemisse HAProxy’sse listener, mis viib uuele IIS-i pordile. `server` real ei ole `ssl` (passthrough). Health jääb HTTP `:8080` peale, et check ei satuks mTLS-i alla.
+
+```text
+frontend install_front
+    mode tcp
+    bind *:8443
+    default_backend iis_install
+
+backend iis_install
+    mode tcp
+    server iis1 10.0.0.11:8443 check port 8080
+    server iis2 10.0.0.12:8443 check port 8080
+```
+
+Tulemüür: tööjaam → HAProxy `:8443`, ja mõlemast HAProxy kihist IIS `:8443`. `:443` reeglid jäävad endiseks.
+
+### 3. Publish sellele HTTPS-aadressile
+
+Visual Studio Installation folder URL (ja manifesti `deploymentProvider`) on `https://install.firma.ee:8443/install/`. Pärast publish’i peab nii `setup.exe` kui `App.application` seda aadressi näitama. Vana `setup.exe` jääb vana pordi külge. Sama aadress jääb serdivabaks ka uuenduste jaoks: ClickOnce käib sealt ka pärast esimest paigaldust.
 
 ```powershell
 Select-String -Path .\setup.exe -Pattern 'https?://' -AllMatches |
@@ -837,19 +868,19 @@ Select-String -Path .\setup.exe -Pattern 'https?://' -AllMatches |
   Select-Object -Unique
 ```
 
-### Kuidas logist ära tunda
+### Kontroll
 
-Mõlemal real on sama `cs-uri-stem`. Brauseri rida on 200. `setup.exe` rida otsustab põhjuse. Bootstrapperi enda tekst on `%temp%\VSD*.txt`.
+IIS-i logis on brauseri ja `setup.exe` rida samal `cs-uri-stem`-il, mõlemad **200**. Bootstrapperi tekst on `%temp%\VSD*.txt`.
 
 | `setup.exe` rida | Põhjus |
 |---|---|
-| Puudub | Kätlus küsis serti ja bootstrapper katkestas enne HTTP-d |
+| Puudub | Kätlus küsis serti (päring läks ikka `:443`-le) või serveriserti ei usaldata |
 | 403.7 | Päring jõudis kohale, see rada nõuab serti |
-| 401 | Kaustal on Windows-auth. Brauser on juba sees, `setup.exe` mitte |
+| 401 | Kaustal on Windows-auth |
 | 404 | Sisse kirjutatud URL ei ole see, kust `.application` serveeritakse |
 | 200, dialoog ütleb ikka vea | Allalaadimine õnnestus. Edasi on allkiri või `deploymentProvider` ei klapi `setup.exe` aadressiga |
 
-Labis teeb seda `scripts/Publish-ClickOnce.ps1` (provider URL `http://demo.local:8080/install/`) ning `scripts/Install-LabServer.ps1` ja Ansible roll `iis_eid`: `/install` saab `sslFlags:None`, `clientcertnegotiation=enable` on ainult sellel HTTPS-pordil, kus on `Demo.svc`.
+Lab ei käi seda SSL-porti läbi. `scripts/Publish-ClickOnce.ps1` kirjutab provider URL-i `http://demo.local:8080/install/` ja `scripts/Install-LabServer.ps1` ning Ansible roll `iis_eid` panevad `/install` peale `sslFlags:None`. `clientcertnegotiation=enable` on ainult sellel HTTPS-pordil, kus on `Demo.svc`. Kodu-labis HAProxy’t paigalduse jaoks ei muudeta, sest leht on otse IIS-i HTTP-pordil.
 
 ---
 
@@ -1515,7 +1546,7 @@ Aus nimekiri, et sa ei loeks labi rohelist tulemust rohkemaks, kui see on:
 - **Päris ID-kaart on PIN1-ga läbi käidud** (ESTEID2018). Vaikimisi labis on tühistus off → 200. Katse 10 (revocation + proxy deny) andis **403.13**.
 - **Tühistus on vaikimisi väljas** (`verifyclientcertrevocation=disable` + `RevocationMode=NoCheck`). 403.13 tuleb ainult `lockdown-ocsp.yml` + `.\lab.ps1 proxy deny` peale. `.\lab.ps1 ansible` paneb tühistuse jälle kinni.
 - **Kaks füüsilist masinat, kaks HAProxy kihti, PROXY protocol** — konfid on olemas (`haproxy/haproxy-production.cfg`), testitud on üks Windows 11 masin.
-- **ClickOnce deploy on olemas** — `.\lab.ps1 publish` (või `start` / `ansible`) paneb lehe `http://demo.local:8080/install/`. See URL **ei tohi** nõuda kliendisertifikaati; PIN1 tuleb alles `Demo.svc` peal. Firefox laadib `.application` faili alla; ava Edge’is. Miks sama fail `setup.exe` kaudu katki läheb, kui aadress on serdi-pordil: [ClickOnce: setup.exe ja .application](#clickonce-setupexe-ja-application).
+- **ClickOnce deploy on olemas** — `.\lab.ps1 publish` (või `start` / `ansible`) paneb lehe `http://demo.local:8080/install/`. See URL **ei tohi** nõuda kliendisertifikaati; PIN1 tuleb alles `Demo.svc` peal. Firefox laadib `.application` faili alla; ava Edge’is. Miks sama fail `setup.exe` kaudu katki läheb, kui aadress on serdi-pordil: [ClickOnce SSL-iga: setup.exe laeb rakenduse alla](#clickonce-ssl-iga-setupexe-laeb-rakenduse-alla).
 - **IIS Express ≠ täis-IIS** — app pooli recycle’i, Failed Request Tracingut ja W3C `sc-substatus` käitumist saab päriselt kontrollida ainult Windows Serveris.
 
 ### Järjekord, kuidas ma seda tööle viiksin
@@ -1624,7 +1655,7 @@ Labis käitub „Kinni" nagu `shutdown-sessions` (protsess sureb). Toodangus kon
 - **CertPropSvc** (Certificate Propagation) peab jooksma, muidu kaardi serte hoidlasse ei ilmu.
 - **Uuendatud kaart:** vanad serdid jäävad hoidlasse. Klient valib aegunud või tühistatud serdi → 403.16 / 403.13 **ainult ühel kasutajal**.
 - **PIN1 blokeerub** kolme vale katsega — see on PIN-akna, mitte serveri viga.
-- **ClickOnce:** paigalduse URL ei tohi nõuda kliendisertifikaati. `.application` võib brauseris töötada ja `setup.exe` samal aadressil ikka katki minna — vt [ClickOnce: setup.exe ja .application](#clickonce-setupexe-ja-application). Allkirjastamissert aegub → „Cannot verify application". ClickOnce vahemälu võib olla katki. Per-user proxy ≠ WinHTTP proxy.
+- **ClickOnce:** paigalduse URL ei tohi nõuda kliendisertifikaati. `.application` võib brauseris töötada ja `setup.exe` samal aadressil ikka katki minna — vt [ClickOnce SSL-iga: setup.exe laeb rakenduse alla](#clickonce-ssl-iga-setupexe-laeb-rakenduse-alla). Allkirjastamissert aegub → „Cannot verify application". ClickOnce vahemälu võib olla katki. Per-user proxy ≠ WinHTTP proxy.
 
 Kontroll kliendis: `certutil -scinfo` (mis kaardil päriselt on) ja kliendi logi thumbprint — võrdle neid omavahel.
 
@@ -1670,7 +1701,7 @@ Kui kirjutad oma koguja-skripti (või loed kellegi teise oma), on need vead kall
 | Iga teine päring ebaõnnestub | üks backend erineb | `service.log` `backend=`, raport igal masinal |
 | Kätlus katkeb, IIS-i logis pole rida | serveri serdi võti või Schannel baseline | Schannel 36870/36874, HTTPERR |
 | Ühendus sureb pausi järel, PIN-i ei küsita | pilve LB idle-timeout | LB seaded (logi ei teki) |
-| `.application` paigaldab, `setup.exe` saab vea | paigaldus on samal pordil, mis küsib kliendiserti | [ClickOnce: setup.exe ja .application](#clickonce-setupexe-ja-application) |
+| `.application` paigaldab, `setup.exe` saab vea | paigaldus on samal pordil, mis küsib kliendiserti | [ClickOnce SSL-iga: setup.exe laeb rakenduse alla](#clickonce-ssl-iga-setupexe-laeb-rakenduse-alla) |
 
 ### Kuidas neid labis tahtlikult tekitada
 
