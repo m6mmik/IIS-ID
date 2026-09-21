@@ -36,21 +36,22 @@ Ametlik serveripoolne juhend: [IIS veebiserverile ID-kaardi toe seadistamine](ht
 12. [Tööl kontrollida (labi järeldused)](#tööl-kontrollida-labi-järeldused)
 13. [Toodangu IIS: ID-kaardi ahel ja paigaldus](#toodangu-iis-id-kaardi-ahel-ja-paigaldus)
 14. [Täpsed IIS seaded](#täpsed-iis-seaded)
-15. [URL-id, mida IIS peab kätte saama (AIA / OCSP / CRL)](#url-id-mida-iis-peab-kätte-saama-aia--ocsp--crl)
-16. [WCF Web.config proxy vs WinHTTP](#wcf-webconfig-proxy-vs-winhttp)
-17. [HAProxy (passthrough, kaks kihti)](#haproxy-passthrough-kaks-kihti)
-18. [Diagnostika: üks koht, kust vaadata](#diagnostika-üks-koht-kust-vaadata)
-19. [PIN1 järel ebaõnnestumine: skriptid ja logid](#pin1-järel-ebaõnnestumine-skriptid-ja-logid)
-20. [lab.ps1 käsud](#labps1-käsud)
-21. [URL-id ja pordid](#url-id-ja-pordid)
-22. [Terraform ja Ansible](#terraform-ja-ansible)
-23. [Enne toodangut: kriitiline nimekiri](#enne-toodangut-kriitiline-nimekiri)
-24. [Vead, mida see lab ise esile ei kutsu](#vead-mida-see-lab-ise-esile-ei-kutsu)
-25. [Suletud võrgu lab: lockdown, proxy ja Windows Server VM](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm)
-26. [Töö repoga võrdlemine (AI-le antav ülesanne)](#töö-repoga-võrdlemine-ai-le-antav-ülesanne)
-27. [Seos töökeskkonnaga](#seos-töökeskkonnaga)
-28. [Docker HAProxy](#docker-haproxy)
-29. [Tõrkeotsing](#tõrkeotsing)
+15. [ClickOnce: setup.exe ja .application](#clickonce-setupexe-ja-application)
+16. [URL-id, mida IIS peab kätte saama (AIA / OCSP / CRL)](#url-id-mida-iis-peab-kätte-saama-aia--ocsp--crl)
+17. [WCF Web.config proxy vs WinHTTP](#wcf-webconfig-proxy-vs-winhttp)
+18. [HAProxy (passthrough, kaks kihti)](#haproxy-passthrough-kaks-kihti)
+19. [Diagnostika: üks koht, kust vaadata](#diagnostika-üks-koht-kust-vaadata)
+20. [PIN1 järel ebaõnnestumine: skriptid ja logid](#pin1-järel-ebaõnnestumine-skriptid-ja-logid)
+21. [lab.ps1 käsud](#labps1-käsud)
+22. [URL-id ja pordid](#url-id-ja-pordid)
+23. [Terraform ja Ansible](#terraform-ja-ansible)
+24. [Enne toodangut: kriitiline nimekiri](#enne-toodangut-kriitiline-nimekiri)
+25. [Vead, mida see lab ise esile ei kutsu](#vead-mida-see-lab-ise-esile-ei-kutsu)
+26. [Suletud võrgu lab: lockdown, proxy ja Windows Server VM](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm)
+27. [Töö repoga võrdlemine (AI-le antav ülesanne)](#töö-repoga-võrdlemine-ai-le-antav-ülesanne)
+28. [Seos töökeskkonnaga](#seos-töökeskkonnaga)
+29. [Docker HAProxy](#docker-haproxy)
+30. [Tõrkeotsing](#tõrkeotsing)
 
 ---
 
@@ -786,6 +787,72 @@ mTLS **töötab TLS 1.2-ga täiesti korralikult**: `clientcertnegotiation=enable
 
 ---
 
+## ClickOnce: setup.exe ja .application
+
+Sümptom tööl: Edge’is avatud `.application` paigaldab rakenduse ära. Sama kausta `setup.exe` tahab sama faili alla laadida, saab vea ja paigaldus ei alga. Mõlemad lähevad **samale aadressile**. Erinevus on klient, mitte tee.
+
+`.application` link on tavaline lehe avamine. Brauser teeb TLS-kätluse ise. Kui server küsib kliendiserti, tuleb aken; kasutaja saab selle tühistada ja brauser jätkab ilma serdita. Kui see rada serti ei nõua, tuleb fail alla ja ClickOnce (`dfshim`) paigaldab selle pealt.
+
+`setup.exe` on Visual Studio bootstrapper, mitte rakendus ise. Ta ei ava brauserit. Aadress on publish’i ajal sisse kirjutatud (Installation folder URL) ja alla laadib ta `.application` ise, `URLDownloadToCacheFile` kaudu, **uue** TLS-ühendusena. Kui kätlus küsib kliendiserti, ei ole tal valikut „jätka ilma serdita“. Allalaadimine katkeb ja paigaldus ei alga. Tihti ei teki IIS-i logisse üldse rida, sest HTTP-ni ei jõuta.
+
+### Miks raja `sslFlags` ei aita
+
+`clientcertnegotiation` on HTTP.sys-i **bindingu** lipp (`ipport` või `hostnameport`). Kätlus küsib serti enne, kui URL on teada. `sslFlags="None"` kaustal `/install` ütleb ainult seda, et IIS pärast kätlust serti ei nõua. Brauser elab küsimise üle, `setup.exe` mitte.
+
+Teenuse HTTPS-porti ära puutu. Seal peab `clientcertnegotiation=enable` jääma, muidu PIN1 kaob. Labis on paigaldus `http://demo.local:8080/install/` ja kaart `https://demo.local:9443/Demo.svc`.
+
+Kui MIME on vale (puudub `application/x-ms-application`), kukub läbi just brauseri link: Edge salvestab faili alla ja ClickOnce ei käivitu. `setup.exe` MIME-t ei vaata. See on vastupidine sümptom.
+
+### Parandus
+
+Paigaldus-URL peab olema bindingul, mille kätlus kliendiserti ei küsi. Kolm asja korraga:
+
+1. Eraldi port, millel `clientcertnegotiation` on väljas. HTTP on lihtsaim (labi `:8080`). Kui paigaldus peab olema HTTPS, tee teine port ja seo sert `clientcertnegotiation=disable`.
+2. Sellel kaustal Anonymous Authentication sees, Windows Authentication väljas, `sslFlags` tühi. Windows-auth annab sama sümptomi staatusega **401**: brauser saadab Negotiate/NTLM ise ära, bootstrapper mitte.
+3. Uus publish. `setup.exe` ja manifesti `deploymentProvider` peavad näitama seda uut aadressi. Vana `setup.exe` jääb vana pordi külge. Sama aadress jääb serdivabaks ka hilisemate uuenduste jaoks — ClickOnce käib sealt ka pärast esimest paigaldust.
+
+Kaks hostinime ühel `0.0.0.0:443` seosel jagavad ühte lippu. Eraldi nimi aitab ainult siis, kui paigaldusel on oma `hostnameport` seos ja sellel on `clientcertnegotiation=disable`. Load balanceris see port ei tohi minna läbi VIP-i, mille taga IIS serti küsib. TCP passthrough laseb SNI IIS-ini, aga üks `ipport`-seos on ikka üks.
+
+```text
+appcmd set config "Sait/install" /section:access /sslFlags:None /commit:apphost
+appcmd set config "Sait/install" /section:system.webServer/security/authentication/anonymousAuthentication /enabled:true /commit:apphost
+appcmd set config "Sait/install" /section:system.webServer/security/authentication/windowsAuthentication /enabled:false /commit:apphost
+```
+
+HTTP-pordil ei tohi `netsh http show sslcert` ridu olla. Eraldi HTTPS-port:
+
+```text
+netsh http add sslcert ipport=0.0.0.0:8443 ^
+    certhash=<THUMBPRINT_WITHOUT_SPACES> ^
+    appid={4dc3e181-e14b-4a21-b022-59fc669b0914} ^
+    certstorename=MY ^
+    clientcertnegotiation=disable
+```
+
+Pärast publish’i vaata, kuhu `setup.exe` päriselt läheb:
+
+```powershell
+Select-String -Path .\setup.exe -Pattern 'https?://' -AllMatches |
+  ForEach-Object { $_.Matches.Value } |
+  Select-Object -Unique
+```
+
+### Kuidas logist ära tunda
+
+Mõlemal real on sama `cs-uri-stem`. Brauseri rida on 200. `setup.exe` rida otsustab põhjuse. Bootstrapperi enda tekst on `%temp%\VSD*.txt`.
+
+| `setup.exe` rida | Põhjus |
+|---|---|
+| Puudub | Kätlus küsis serti ja bootstrapper katkestas enne HTTP-d |
+| 403.7 | Päring jõudis kohale, see rada nõuab serti |
+| 401 | Kaustal on Windows-auth. Brauser on juba sees, `setup.exe` mitte |
+| 404 | Sisse kirjutatud URL ei ole see, kust `.application` serveeritakse |
+| 200, dialoog ütleb ikka vea | Allalaadimine õnnestus. Edasi on allkiri või `deploymentProvider` ei klapi `setup.exe` aadressiga |
+
+Labis teeb seda `scripts/Publish-ClickOnce.ps1` (provider URL `http://demo.local:8080/install/`) ning `scripts/Install-LabServer.ps1` ja Ansible roll `iis_eid`: `/install` saab `sslFlags:None`, `clientcertnegotiation=enable` on ainult sellel HTTPS-pordil, kus on `Demo.svc`.
+
+---
+
 ## URL-id, mida IIS peab kätte saama (AIA / OCSP / CRL)
 
 HTTP.sys ehitab ahela **CAPI2 / Schannel** kaudu. Võrk käib **WinHTTP** kui **Local System**, **mitte** IE ega `Web.config` `<defaultProxy>`.
@@ -1232,7 +1299,7 @@ WCF `forbidden ... scheme 'Anonymous'` = loe IIS **alamstaatus** 16 või 13, är
 | `lockdown [nimi]` | **ADMIN:** tee masinast suletud võrgu server. Ilma nimeta = status. `hosts-blackhole` / `system-no-net` / `proxy-only` / `dead-proxy` / `no-aia` / `no-issuer` |
 | `unlock` | **ADMIN:** võtab kõik lockdown-muudatused tagasi |
 | `haproxy` / `haproxy-stop` | Docker HAProxy TCP passthrough |
-| `hyperv` / `vm` / `vm-start` / `vm-check` / `vm-fix` | Hyper-V suletud võrgu VM (vt [peatükk 24](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm)) |
+| `hyperv` / `vm` / `vm-start` / `vm-check` / `vm-fix` | Hyper-V suletud võrgu VM (vt [peatükk 26](#suletud-võrgu-lab-lockdown-proxy-ja-windows-server-vm)) |
 | `iac` | Ansible kontrollsõlm WSL-i (ansible-core + Windows collectionid) |
 | `ansible-ping` | WinRM `win_ping` guestile `192.168.56.10` (`$env:LAB_WINRM_PASSWORD`) |
 | `ansible` | Sama IIS/ESTEID/WinHTTP roll mis Nutanixis; buildib ja teeb ClickOnce `/install` enne |
@@ -1448,7 +1515,7 @@ Aus nimekiri, et sa ei loeks labi rohelist tulemust rohkemaks, kui see on:
 - **Päris ID-kaart on PIN1-ga läbi käidud** (ESTEID2018). Vaikimisi labis on tühistus off → 200. Katse 10 (revocation + proxy deny) andis **403.13**.
 - **Tühistus on vaikimisi väljas** (`verifyclientcertrevocation=disable` + `RevocationMode=NoCheck`). 403.13 tuleb ainult `lockdown-ocsp.yml` + `.\lab.ps1 proxy deny` peale. `.\lab.ps1 ansible` paneb tühistuse jälle kinni.
 - **Kaks füüsilist masinat, kaks HAProxy kihti, PROXY protocol** — konfid on olemas (`haproxy/haproxy-production.cfg`), testitud on üks Windows 11 masin.
-- **ClickOnce deploy on olemas** — `.\lab.ps1 publish` (või `start` / `ansible`) paneb lehe `http://demo.local:8080/install/`. See URL **ei tohi** nõuda kliendisertifikaati; PIN1 tuleb alles `Demo.svc` peal. Firefox laadib `.application` faili alla; ava Edge’is.
+- **ClickOnce deploy on olemas** — `.\lab.ps1 publish` (või `start` / `ansible`) paneb lehe `http://demo.local:8080/install/`. See URL **ei tohi** nõuda kliendisertifikaati; PIN1 tuleb alles `Demo.svc` peal. Firefox laadib `.application` faili alla; ava Edge’is. Miks sama fail `setup.exe` kaudu katki läheb, kui aadress on serdi-pordil: [ClickOnce: setup.exe ja .application](#clickonce-setupexe-ja-application).
 - **IIS Express ≠ täis-IIS** — app pooli recycle’i, Failed Request Tracingut ja W3C `sc-substatus` käitumist saab päriselt kontrollida ainult Windows Serveris.
 
 ### Järjekord, kuidas ma seda tööle viiksin
@@ -1466,7 +1533,7 @@ Kui punktid 1–6 on läbi ja midagi ikka logiseb, on järgmine peatükk see, mi
 
 ## Vead, mida see lab ise esile ei kutsu
 
-Lab tõestab ahela, passthrough'i ja alamstaatuste lugemise. Toodangus on peal kihid, mida kodus **ei ole**: GPO ja ettevõtte PKI, korporatiivproxy, kaks LB kihti, pilve/riistvara idle-timeout'id, ClickOnce paigaldus, Citrix/RDP, päris kaart päris PIN-iga ja mitu kasutajat korraga. Allpool on nende kihtide tüüpvead: **sümptom → põhjus → kust vaadata → parandus**. Diagnostikatööriistad ([peatükk 17](#diagnostika-üks-koht-kust-vaadata)) näitavad neid kõiki, aga sa pead teadma, mida küsida.
+Lab tõestab ahela, passthrough'i ja alamstaatuste lugemise. Toodangus on peal kihid, mida kodus **ei ole**: GPO ja ettevõtte PKI, korporatiivproxy, kaks LB kihti, pilve/riistvara idle-timeout'id, ClickOnce paigaldus, Citrix/RDP, päris kaart päris PIN-iga ja mitu kasutajat korraga. Allpool on nende kihtide tüüpvead: **sümptom → põhjus → kust vaadata → parandus**. Diagnostikatööriistad ([peatükk 19](#diagnostika-üks-koht-kust-vaadata)) näitavad neid kõiki, aga sa pead teadma, mida küsida.
 
 ### 1. PIN1 küsitakse uuesti keset tööd
 
@@ -1557,7 +1624,7 @@ Labis käitub „Kinni" nagu `shutdown-sessions` (protsess sureb). Toodangus kon
 - **CertPropSvc** (Certificate Propagation) peab jooksma, muidu kaardi serte hoidlasse ei ilmu.
 - **Uuendatud kaart:** vanad serdid jäävad hoidlasse. Klient valib aegunud või tühistatud serdi → 403.16 / 403.13 **ainult ühel kasutajal**.
 - **PIN1 blokeerub** kolme vale katsega — see on PIN-akna, mitte serveri viga.
-- **ClickOnce:** paigalduse URL ei tohi nõuda kliendisertifikaati (install kukub vaikselt läbi); allkirjastamissert aegub → „Cannot verify application"; ClickOnce vahemälu võib olla katki; per-user proxy ≠ WinHTTP proxy.
+- **ClickOnce:** paigalduse URL ei tohi nõuda kliendisertifikaati. `.application` võib brauseris töötada ja `setup.exe` samal aadressil ikka katki minna — vt [ClickOnce: setup.exe ja .application](#clickonce-setupexe-ja-application). Allkirjastamissert aegub → „Cannot verify application". ClickOnce vahemälu võib olla katki. Per-user proxy ≠ WinHTTP proxy.
 
 Kontroll kliendis: `certutil -scinfo` (mis kaardil päriselt on) ja kliendi logi thumbprint — võrdle neid omavahel.
 
@@ -1603,6 +1670,7 @@ Kui kirjutad oma koguja-skripti (või loed kellegi teise oma), on need vead kall
 | Iga teine päring ebaõnnestub | üks backend erineb | `service.log` `backend=`, raport igal masinal |
 | Kätlus katkeb, IIS-i logis pole rida | serveri serdi võti või Schannel baseline | Schannel 36870/36874, HTTPERR |
 | Ühendus sureb pausi järel, PIN-i ei küsita | pilve LB idle-timeout | LB seaded (logi ei teki) |
+| `.application` paigaldab, `setup.exe` saab vea | paigaldus on samal pordil, mis küsib kliendiserti | [ClickOnce: setup.exe ja .application](#clickonce-setupexe-ja-application) |
 
 ### Kuidas neid labis tahtlikult tekitada
 
